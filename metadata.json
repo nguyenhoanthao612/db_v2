@@ -1,0 +1,6 @@
+{
+  "name": "IC3 GS6 Exam Prep",
+  "description": "Hệ thống ôn tập IC3 GS6 hiện đại, đồng bộ Google Sheets, tối ưu Lazy Loading",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
