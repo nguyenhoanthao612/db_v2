@@ -23,6 +23,16 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
   const [quizFinished, setQuizFinished] = useState(false);
   const [scoreRecord, setScoreRecord] = useState<ScoreRecord | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [draggingDot, setDraggingDot] = useState<{
+    qId: string;
+    index: number;
+    startX: number;
+    startY: number;
+    startDotX: number;
+    startDotY: number;
+    containerWidth: number;
+    containerHeight: number;
+  } | null>(null);
 
   // Load questions
   useEffect(() => {
@@ -57,7 +67,7 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
           } else if (q.QuestionType === 'Categorization') {
             initialAnswers[q.QuestionID] = {}; // item -> category
           } else if (q.QuestionType === 'Hotspot') {
-            initialAnswers[q.QuestionID] = null; // selected hotspot id
+            initialAnswers[q.QuestionID] = []; // selected hotspots dots array
           } else if (q.QuestionType === 'Match Image To Text') {
             initialAnswers[q.QuestionID] = Array(parsedAnswers.imageOptions?.length || 0).fill(null); // idx -> text index
           } else if (q.QuestionType === 'Matrix Selection') {
@@ -161,7 +171,38 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
       }
 
       if (q.QuestionType === 'Hotspot') {
-        return String(studentAnswer) === String(correctAnsStr);
+        try {
+          const parsed: QuestionAnswers = JSON.parse(q.Answers);
+          const hotspots = parsed.hotspots || [];
+          if (!Array.isArray(studentAnswer)) {
+            return String(studentAnswer) === String(correctAnsStr);
+          }
+          const dots = studentAnswer as { x: number; y: number }[];
+          if (hotspots.length !== dots.length) return false;
+
+          const match = (hotspotIdx: number, usedDots: Set<number>): boolean => {
+            if (hotspotIdx === hotspots.length) return true;
+            const spot = hotspots[hotspotIdx] as any;
+            for (let i = 0; i < dots.length; i++) {
+              if (!usedDots.has(i)) {
+                const dot = dots[i];
+                const inside = dot.x >= spot.x && dot.x <= (spot.x + (spot.width || spot.w || 0)) &&
+                               dot.y >= spot.y && dot.y <= (spot.y + (spot.height || spot.h || 0));
+                if (inside) {
+                  usedDots.add(i);
+                  if (match(hotspotIdx + 1, usedDots)) {
+                    return true;
+                  }
+                  usedDots.delete(i);
+                }
+              }
+            }
+            return false;
+          };
+          return match(0, new Set());
+        } catch (e) {
+          return String(studentAnswer) === String(correctAnsStr);
+        }
       }
 
       if (q.QuestionType === 'Match Image To Text') {
@@ -686,57 +727,128 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                 )}
 
                 {/* 9. HOTSPOT (Click Image Target Coordinate) */}
-                {currentQ.QuestionType === 'Hotspot' && parsedAnswers.hotspots && currentQ.Image && (
-                  <div className="space-y-4">
-                    <p className="text-xs text-blue-600 font-bold bg-blue-50 p-2.5 rounded-lg mb-3">
-                      💡 Hãy nhấp chuột trực tiếp lên vùng tương ứng trên bức ảnh sơ đồ để chọn câu trả lời đúng của bạn:
-                    </p>
+                {/* 9. HOTSPOT (Click Image Target Coordinate) */}
+                {currentQ.QuestionType === 'Hotspot' && parsedAnswers.hotspots && currentQ.Image && (() => {
+                  const targetCount = parsedAnswers.hotspots.length;
+                  const dots = Array.isArray(currentAnswer) ? currentAnswer : [];
 
-                    <div className="relative border border-slate-200 rounded-2xl overflow-hidden max-w-2xl mx-auto bg-slate-900 select-none">
-                      <img src={currentQ.Image} alt="Hotspot layout" className="w-full h-auto opacity-80" />
+                  return (
+                    <div className="space-y-4">
+                      <div className="bg-indigo-50 border border-indigo-100 text-indigo-700 p-3.5 rounded-2xl text-xs font-bold leading-relaxed shadow-sm">
+                        💡 <strong>Hướng dẫn trả lời:</strong>
+                        <ul className="list-disc pl-4 mt-1 space-y-1">
+                          <li>Hãy nhấp chuột vào ảnh để đánh dấu các vị trí đúng (tối đa {targetCount} dấu chấm).</li>
+                          <li>Bạn có thể <strong>kéo thả di chuyển</strong> các dấu chấm đã đặt để tinh chỉnh vị trí.</li>
+                          <li>Ấn nút <strong>Xóa tất cả</strong> ở dưới nếu muốn làm lại từ đầu.</li>
+                        </ul>
+                      </div>
 
-                      {/* Overlays for targets */}
-                      {parsedAnswers.hotspots.map((spot) => {
-                        const isSelected = currentAnswer === spot.id;
+                      <div 
+                        className="relative border-2 border-slate-200/80 rounded-2xl overflow-hidden max-w-2xl mx-auto bg-slate-950 select-none shadow-lg cursor-crosshair"
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest('.student-hotspot-dot')) {
+                            return;
+                          }
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const clickX = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+                          const clickY = Math.round(((e.clientY - rect.top) / rect.height) * 100);
 
-                        return (
+                          if (dots.length < targetCount) {
+                            const newDots = [...dots, { x: clickX, y: clickY }];
+                            handleSelectAnswer(currentQ.QuestionID, newDots);
+                          }
+                        }}
+                      >
+                        <img 
+                          src={currentQ.Image} 
+                          alt="Hotspot layout" 
+                          className="w-full h-auto opacity-95 max-h-[450px] object-contain pointer-events-none" 
+                        />
+
+                        {/* Placed dots */}
+                        {dots.map((dot: any, dIdx: number) => {
+                          const isDragging = draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx;
+                          return (
+                            <div
+                              key={dIdx}
+                              className={`student-hotspot-dot absolute w-7 h-7 bg-rose-500 hover:bg-rose-600 text-white rounded-full flex items-center justify-center font-extrabold text-xs shadow-md border-2 border-white cursor-move select-none z-10 transition-transform ${
+                                isDragging ? 'scale-110 shadow-lg ring-4 ring-rose-400/30' : 'hover:scale-105 active:scale-95'
+                              }`}
+                              style={{
+                                left: `${dot.x}%`,
+                                top: `${dot.y}%`,
+                                transform: 'translate(-50%, -50%)',
+                                touchAction: 'none',
+                              }}
+                              onPointerDown={(e) => {
+                                const rect = e.currentTarget.parentElement?.getBoundingClientRect();
+                                if (!rect) return;
+                                e.stopPropagation();
+                                setDraggingDot({
+                                  qId: currentQ.QuestionID,
+                                  index: dIdx,
+                                  startX: e.clientX,
+                                  startY: e.clientY,
+                                  startDotX: dot.x,
+                                  startDotY: dot.y,
+                                  containerWidth: rect.width,
+                                  containerHeight: rect.height,
+                                });
+                                e.currentTarget.setPointerCapture(e.pointerId);
+                              }}
+                              onPointerMove={(e) => {
+                                if (draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx) {
+                                  const deltaX = e.clientX - draggingDot.startX;
+                                  const deltaY = e.clientY - draggingDot.startY;
+
+                                  const deltaXPct = (deltaX / draggingDot.containerWidth) * 100;
+                                  const deltaYPct = (deltaY / draggingDot.containerHeight) * 100;
+
+                                  const newX = Math.round(draggingDot.startDotX + deltaXPct);
+                                  const newY = Math.round(draggingDot.startDotY + deltaYPct);
+
+                                  const boundedX = Math.max(0, Math.min(100, newX));
+                                  const boundedY = Math.max(0, Math.min(100, newY));
+
+                                  const arr = [...dots];
+                                  if (arr[dIdx]) {
+                                    arr[dIdx] = { x: boundedX, y: boundedY };
+                                    handleSelectAnswer(currentQ.QuestionID, arr);
+                                  }
+                                }
+                              }}
+                              onPointerUp={(e) => {
+                                if (draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx) {
+                                  e.currentTarget.releasePointerCapture(e.pointerId);
+                                  setDraggingDot(null);
+                                }
+                              }}
+                              title={`Dấu chấm ${dIdx + 1} (Kéo để di chuyển)`}
+                            >
+                              {dIdx + 1}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200/60 max-w-2xl mx-auto">
+                        <span className="text-xs font-bold text-slate-500">
+                          Đã đánh dấu: <strong className="text-indigo-600 font-extrabold">{dots.length}</strong> / <strong className="text-slate-700">{targetCount}</strong> dấu chấm
+                        </span>
+
+                        {dots.length > 0 && (
                           <button
-                            key={spot.id}
                             type="button"
-                            onClick={() => handleSelectAnswer(currentQ.QuestionID, spot.id)}
-                            className={`absolute border-2 transition duration-200 cursor-pointer ${
-                              isSelected
-                                ? 'bg-blue-400/30 border-blue-500 ring-2 ring-blue-300'
-                                : 'bg-white/5 border-white/20 hover:bg-white/10 hover:border-white/50'
-                            }`}
-                            style={{
-                              left: `${spot.x}%`,
-                              top: `${spot.y}%`,
-                              width: `${spot.width}%`,
-                              height: `${spot.height}%`,
-                            }}
-                            title={spot.name}
+                            onClick={() => handleSelectAnswer(currentQ.QuestionID, [])}
+                            className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-500 border border-slate-200 hover:border-rose-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
                           >
-                            {isSelected && (
-                              <span className="absolute -top-3.5 -right-3.5 bg-blue-500 text-white rounded-full p-0.5 shadow">
-                                <Check className="w-3 h-3" />
-                              </span>
-                            )}
+                            <RefreshCw className="w-3.5 h-3.5" /> Xóa tất cả dấu chấm
                           </button>
-                        );
-                      })}
+                        )}
+                      </div>
                     </div>
-
-                    <div className="text-center">
-                      <span className="text-xs font-bold text-slate-400">
-                        Vùng đang chọn:{' '}
-                        <strong className="text-blue-600">
-                          {parsedAnswers.hotspots.find((s) => s.id === currentAnswer)?.name || 'Chưa chọn'}
-                        </strong>
-                      </span>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* 10. MATCH IMAGE TO TEXT */}
                 {currentQ.QuestionType === 'Match Image To Text' && parsedAnswers.imageOptions && parsedAnswers.textTargets && (
@@ -1028,7 +1140,9 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                                 .map(([k, v]) => `[${k}: ${v}]`)
                                 .join(', ')
                             ) : q.QuestionType === 'Hotspot' ? (
-                              answersParsed.hotspots?.find((s) => s.id === studentAns)?.name || studentAns
+                              Array.isArray(studentAns)
+                                ? `Đã đặt ${studentAns.length} vị trí chấm trên hình ảnh`
+                                : (answersParsed.hotspots?.find((s) => s.id === studentAns)?.name || studentAns)
                             ) : q.QuestionType === 'Match Image To Text' ? (
                               (studentAns as number[])
                                 .map((tIdx, i) => `[Ảnh ${i + 1} ➔ ${tIdx !== null ? answersParsed.textTargets?.[tIdx] : 'Chưa gán'}]`)
@@ -1067,7 +1181,9 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                                 .map(([k, v]) => `[${k}: ${v}]`)
                                 .join(', ')
                             ) : q.QuestionType === 'Hotspot' ? (
-                              answersParsed.hotspots?.find((s) => s.id === q.CorrectAnswer)?.name || q.CorrectAnswer
+                              answersParsed.hotspots
+                                ? `Yêu cầu xác định ${answersParsed.hotspots.length} vùng: [${answersParsed.hotspots.map((s: any) => s.name || s.id).join(', ')}]`
+                                : q.CorrectAnswer
                             ) : q.QuestionType === 'Match Image To Text' ? (
                               JSON.parse(q.CorrectAnswer)
                                 .map((tIdx: number, i: number) => `[Ảnh ${i + 1} ➔ ${answersParsed.textTargets?.[tIdx]}]`)
