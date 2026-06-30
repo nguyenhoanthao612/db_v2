@@ -65,8 +65,8 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
   const [studentUsername, setStudentUsername] = useState('');
   const [studentPassword, setStudentPassword] = useState('');
   const [studentFullName, setStudentFullName] = useState('');
-  const [studentClass, setStudentClass] = useState('10A1');
-  const [studentSchool, setStudentSchool] = useState('THPT Nguyễn Trãi');
+  const [studentClass, setStudentClass] = useState('');
+  const [studentSchool, setStudentSchool] = useState('');
 
   // Exams State
   const [exams, setExams] = useState<Exam[]>([]);
@@ -239,14 +239,14 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
       setStudentPassword(st.Password || '123');
       setStudentFullName(st.FullName);
       setStudentClass(st.ClassGroup);
-      setStudentSchool(st.SchoolName || 'THPT Nguyễn Trãi');
+      setStudentSchool(st.SchoolName || '');
     } else {
       setEditingStudent(null);
       setStudentUsername('');
       setStudentPassword('');
       setStudentFullName('');
-      setStudentClass('10A1');
-      setStudentSchool('THPT Nguyễn Trãi');
+      setStudentClass('');
+      setStudentSchool('');
     }
     setShowStudentModal(true);
   };
@@ -1284,7 +1284,7 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                 <input
                   type="text"
                   required
-                  placeholder="ví dụ: THPT Nguyễn Trãi"
+                  placeholder="Nhập tên Trường học"
                   value={studentSchool}
                   onChange={(e) => setStudentSchool(e.target.value)}
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none font-bold text-slate-700 bg-slate-50/50"
@@ -1292,18 +1292,15 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
               </div>
 
               <div>
-                <label className="block mb-1.5">Chọn Lớp</label>
-                <select
+                <label className="block mb-1.5">Lớp Học</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Nhập tên Lớp (VD: 10A1)"
                   value={studentClass}
                   onChange={(e) => setStudentClass(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none bg-white font-bold text-slate-700"
-                >
-                  {['10A1', '10A2', '10A3', '11B1', '11B2', '11B3', '12C1', '12C2', 'Khác'].map((cls) => (
-                    <option key={cls} value={cls}>
-                      Lớp {cls}
-                    </option>
-                  ))}
-                </select>
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none font-bold text-slate-700 bg-slate-50/50"
+                />
               </div>
 
               <button

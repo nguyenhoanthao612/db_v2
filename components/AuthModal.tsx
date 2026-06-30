@@ -16,7 +16,7 @@ export default function AuthModal({ onLoginSuccess }: AuthModalProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [classGroup, setClassGroup] = useState('10A1');
+  const [classGroup, setClassGroup] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -27,12 +27,10 @@ export default function AuthModal({ onLoginSuccess }: AuthModalProps) {
   const [selectedStudentName, setSelectedStudentName] = useState('');
 
   // Custom registration inputs if they choose "Nhập khác"
-  const [regSchoolType, setRegSchoolType] = useState<'select' | 'custom'>('select');
+  const [regSchoolType, setRegSchoolType] = useState<'select' | 'custom'>('custom');
   const [regSchoolCustom, setRegSchoolCustom] = useState('');
-  const [regClassType, setRegClassType] = useState<'select' | 'custom'>('select');
+  const [regClassType, setRegClassType] = useState<'select' | 'custom'>('custom');
   const [regClassCustom, setRegClassCustom] = useState('');
-
-  const defaultClasses = ['10A1', '10A2', '10A3', '11B1', '11B2', '11B3', '12C1', '12C2'];
 
   // Load students from DB to populate dropdowns
   React.useEffect(() => {
@@ -40,6 +38,15 @@ export default function AuthModal({ onLoginSuccess }: AuthModalProps) {
       try {
         const { students } = await DatabaseService.getStudents();
         setAllStudents(students);
+        
+        const uniqueSchools = Array.from(new Set(students.map((s) => s.SchoolName).filter(Boolean)));
+        if (uniqueSchools.length === 0) {
+          setRegSchoolType('custom');
+          setRegClassType('custom');
+        } else {
+          setRegSchoolType('select');
+          setRegClassType('select');
+        }
       } catch (err) {
         console.error('Failed to load students list for dropdowns:', err);
       }
@@ -56,8 +63,7 @@ export default function AuthModal({ onLoginSuccess }: AuthModalProps) {
   const classes = React.useMemo(() => {
     if (!selectedSchool) return [];
     const schoolStudents = allStudents.filter((s) => s.SchoolName === selectedSchool);
-    const uniqueClasses = Array.from(new Set(schoolStudents.map((s) => s.ClassGroup).filter(Boolean)));
-    return uniqueClasses.length > 0 ? uniqueClasses : defaultClasses;
+    return Array.from(new Set(schoolStudents.map((s) => s.ClassGroup).filter(Boolean)));
   }, [selectedSchool, allStudents]);
 
   // Derive filtered students based on school and class
@@ -81,6 +87,18 @@ export default function AuthModal({ onLoginSuccess }: AuthModalProps) {
     setSelectedSchool(school);
     setSelectedClass('');
     setSelectedStudentName('');
+
+    if (school) {
+      const schoolStudents = allStudents.filter((s) => s.SchoolName === school);
+      const uniqueClasses = Array.from(new Set(schoolStudents.map((s) => s.ClassGroup).filter(Boolean)));
+      if (uniqueClasses.length === 0) {
+        setRegClassType('custom');
+      } else {
+        setRegClassType('select');
+      }
+    } else {
+      setRegClassType('custom');
+    }
   };
 
   const handleClassChange = (cls: string) => {
@@ -272,22 +290,24 @@ export default function AuthModal({ onLoginSuccess }: AuthModalProps) {
               <div>
                 <div className="flex justify-between items-center mb-1.5">
                   <label className="block text-xs font-bold text-slate-500">Trường Học</label>
-                  <button
-                    type="button"
-                    onClick={() => setRegSchoolType(regSchoolType === 'select' ? 'custom' : 'select')}
-                    className="text-xs text-blue-500 hover:underline font-bold"
-                  >
-                    {regSchoolType === 'select' ? 'Tự nhập tên trường' : 'Chọn trường có sẵn'}
-                  </button>
+                  {schools.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setRegSchoolType(regSchoolType === 'select' ? 'custom' : 'select')}
+                      className="text-xs text-blue-500 hover:underline font-bold"
+                    >
+                      {regSchoolType === 'select' ? 'Tự nhập tên trường' : 'Chọn trường có sẵn'}
+                    </button>
+                  )}
                 </div>
-                {regSchoolType === 'select' ? (
+                {regSchoolType === 'select' && schools.length > 0 ? (
                   <select
                     value={selectedSchool}
                     onChange={(e) => handleSchoolChange(e.target.value)}
                     className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition bg-white"
                   >
                     <option value="">-- Chọn Trường học có sẵn --</option>
-                    {(schools.length > 0 ? schools : ['THPT Nguyễn Trãi', 'THPT Lê Quý Đôn']).map((school) => (
+                    {schools.map((school) => (
                       <option key={school} value={school}>
                         {school}
                       </option>
@@ -308,21 +328,24 @@ export default function AuthModal({ onLoginSuccess }: AuthModalProps) {
               <div>
                 <div className="flex justify-between items-center mb-1.5">
                   <label className="block text-xs font-bold text-slate-500">Lớp Học</label>
-                  <button
-                    type="button"
-                    onClick={() => setRegClassType(regClassType === 'select' ? 'custom' : 'select')}
-                    className="text-xs text-blue-500 hover:underline font-bold"
-                  >
-                    {regClassType === 'select' ? 'Tự nhập tên lớp' : 'Chọn lớp có sẵn'}
-                  </button>
+                  {classes.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setRegClassType(regClassType === 'select' ? 'custom' : 'select')}
+                      className="text-xs text-blue-500 hover:underline font-bold"
+                    >
+                      {regClassType === 'select' ? 'Tự nhập tên lớp' : 'Chọn lớp có sẵn'}
+                    </button>
+                  )}
                 </div>
-                {regClassType === 'select' ? (
+                {regClassType === 'select' && classes.length > 0 ? (
                   <select
                     value={classGroup}
                     onChange={(e) => setClassGroup(e.target.value)}
                     className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition bg-white"
                   >
-                    {defaultClasses.map((cls) => (
+                    <option value="">-- Chọn Lớp học có sẵn --</option>
+                    {classes.map((cls) => (
                       <option key={cls} value={cls}>
                         Lớp {cls}
                       </option>
@@ -355,11 +378,15 @@ export default function AuthModal({ onLoginSuccess }: AuthModalProps) {
                   className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition bg-white"
                 >
                   <option value="">-- Chọn Trường --</option>
-                  {(schools.length > 0 ? schools : ['THPT Nguyễn Trãi', 'THPT Lê Quý Đôn']).map((school) => (
-                    <option key={school} value={school}>
-                      {school}
-                    </option>
-                  ))}
+                  {schools.length === 0 ? (
+                    <option value="" disabled>Chưa có dữ liệu trường học. Vui lòng sang tab Đăng ký.</option>
+                  ) : (
+                    schools.map((school) => (
+                      <option key={school} value={school}>
+                        {school}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
