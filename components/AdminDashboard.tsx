@@ -144,6 +144,295 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Auto parsing states for raw IC3 question text
+  const [parseStatus, setParseStatus] = useState('');
+
+  const handleAutoParse = (text: string) => {
+    if (!text.trim()) {
+      return;
+    }
+
+    try {
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length === 0) {
+        return;
+      }
+
+      let explanation = '';
+      let cleanedLines: string[] = [];
+
+      // Extract explanation
+      let explanationIndex = -1;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const lowerLine = lines[i].toLowerCase();
+        if (lowerLine.startsWith('giải thích:') || 
+            lowerLine.startsWith('lý do:') || 
+            lowerLine.startsWith('explanation:') || 
+            lowerLine.startsWith('explain:') ||
+            lowerLine.startsWith('*giải thích:') ||
+            lowerLine.startsWith('**giải thích:')) {
+          explanationIndex = i;
+          break;
+        }
+      }
+
+      if (explanationIndex !== -1) {
+        explanation = lines.slice(explanationIndex)
+          .join('\n')
+          .replace(/^(giải thích|lý do|explanation|explain|[* ]*giải thích)[：:\s]*/i, '')
+          .trim();
+        cleanedLines = lines.slice(0, explanationIndex);
+      } else {
+        cleanedLines = [...lines];
+      }
+
+      // Separate question from options
+      let questionLines: string[] = [];
+      let optionLines: string[] = [];
+      let reachedOptions = false;
+
+      const isOptionLine = (line: string) => {
+        const lower = line.toLowerCase();
+        if (/^[a-fA-F]\.\s+/.test(line)) return true;
+        if (/^[a-fA-F]\)\s+/.test(line)) return true;
+        if (lower.startsWith('- ') || lower.startsWith('• ')) return true;
+        if (lower.includes('(correct)')) return true;
+        return false;
+      };
+
+      for (const line of cleanedLines) {
+        if (isOptionLine(line)) {
+          reachedOptions = true;
+        }
+        if (reachedOptions) {
+          optionLines.push(line);
+        } else {
+          questionLines.push(line);
+        }
+      }
+
+      // Fallback
+      if (optionLines.length === 0 && cleanedLines.length > 2) {
+        const lastLines = cleanedLines.slice(-4);
+        if (lastLines.every(l => /^[a-fA-D1-4]\s*[\.\s\)]/i.test(l))) {
+          questionLines = cleanedLines.slice(0, -4);
+          optionLines = lastLines;
+        } else {
+          questionLines = [cleanedLines[0]];
+          optionLines = cleanedLines.slice(1);
+        }
+      }
+
+      const questionContent = questionLines.join('\n').trim();
+      const lowerQuestion = questionContent.toLowerCase();
+
+      // Parse individual options
+      const parsedOptions = optionLines.map((line) => {
+        let textVal = line;
+        let isCorrect = false;
+
+        if (line.toLowerCase().includes('(correct)')) {
+          isCorrect = true;
+          textVal = line.replace(/\(correct\)/i, '').trim();
+        }
+
+        // Strip prefix (e.g., "a.", "b.", "1.", "-", etc.)
+        textVal = textVal.replace(/^([a-fA-F0-9\-•])[\.\)\s\-•]+\s*/, '').trim();
+        return { text: textVal, isCorrect };
+      });
+
+      const correctCount = parsedOptions.filter(o => o.isCorrect).length;
+
+      // Identify question type
+      let detectedType: IC3QuestionType = 'Multiple Choice';
+
+      const hasArrow = optionLines.some(l => l.includes('->') || l.includes('➔') || l.includes('-->'));
+      const isSequenceKeyword = lowerQuestion.includes('thứ tự') || 
+                                lowerQuestion.includes('sắp xếp') || 
+                                lowerQuestion.includes('trình tự') || 
+                                lowerQuestion.includes('các bước') ||
+                                lowerQuestion.includes('sequence') || 
+                                lowerQuestion.includes('order');
+
+      const isTrueFalse = parsedOptions.length === 2 && (
+        parsedOptions.some(o => ['đúng', 'sai'].includes(o.text.toLowerCase())) ||
+        parsedOptions.some(o => ['true', 'false'].includes(o.text.toLowerCase())) ||
+        parsedOptions.some(o => ['yes', 'no'].includes(o.text.toLowerCase()))
+      );
+
+      const isTrueFalseMultiple = parsedOptions.length > 2 && parsedOptions.every(o => 
+        o.text.toLowerCase().endsWith('đúng') || 
+        o.text.toLowerCase().endsWith('sai') || 
+        o.text.toLowerCase().includes('đúng') || 
+        o.text.toLowerCase().includes('sai') ||
+        o.text.toLowerCase().endsWith('true') || 
+        o.text.toLowerCase().endsWith('false')
+      );
+
+      const isCategorization = lowerQuestion.includes('phân loại') || lowerQuestion.includes('categorize') || lowerQuestion.includes('nhóm');
+
+      const isMultipleResponse = 
+        lowerQuestion.includes('(chọn 2)') || 
+        lowerQuestion.includes('(chọn 3)') || 
+        lowerQuestion.includes('(chọn tất cả') || 
+        lowerQuestion.includes('choose 2') || 
+        lowerQuestion.includes('choose 3') || 
+        correctCount >= 2;
+
+      if (isTrueFalse) {
+        detectedType = 'True / False';
+      } else if (hasArrow) {
+        if (isCategorization) {
+          detectedType = 'Categorization';
+        } else {
+          detectedType = 'Matching';
+        }
+      } else if (isSequenceKeyword && parsedOptions.length > 2) {
+        detectedType = 'Sequence Ordering';
+      } else if (isTrueFalseMultiple) {
+        detectedType = 'True/False Multiple';
+      } else if (isMultipleResponse) {
+        detectedType = 'Multiple Response';
+      } else {
+        detectedType = 'Multiple Choice';
+      }
+
+      setQType(detectedType);
+      setQContent(questionContent);
+      setQExplanation(explanation);
+
+      // Apply inputs depending on type
+      if ((detectedType as string) === 'Multiple Choice' || (detectedType as string) === 'Video Based') {
+        const mcOps = ['', '', '', ''];
+        parsedOptions.forEach((o, i) => {
+          if (i < 4) mcOps[i] = o.text;
+        });
+        if (parsedOptions.length > 4) {
+          setMcOptions(parsedOptions.map(o => o.text));
+        } else {
+          setMcOptions(mcOps);
+        }
+        
+        const correctIdx = parsedOptions.findIndex(o => o.isCorrect);
+        setCorrectMcIndex(correctIdx !== -1 ? correctIdx : 0);
+      } 
+      else if (detectedType === 'Multiple Response') {
+        const mrOps = ['', '', '', ''];
+        parsedOptions.forEach((o, i) => {
+          if (i < 4) mrOps[i] = o.text;
+        });
+        if (parsedOptions.length > 4) {
+          setMrOptions(parsedOptions.map(o => o.text));
+        } else {
+          setMrOptions(mrOps);
+        }
+
+        const correctIndices: number[] = [];
+        parsedOptions.forEach((o, i) => {
+          if (o.isCorrect) correctIndices.push(i);
+        });
+        setCorrectMrIndices(correctIndices);
+      } 
+      else if (detectedType === 'True / False') {
+        const correctOpt = parsedOptions.find(o => o.isCorrect);
+        if (correctOpt) {
+          const txt = correctOpt.text.toLowerCase();
+          if (txt.includes('đúng') || txt.includes('true') || txt.includes('yes')) {
+            setTfCorrect('Đúng');
+          } else {
+            setTfCorrect('Sai');
+          }
+        } else {
+          setTfCorrect('Đúng');
+        }
+      } 
+      else if (detectedType === 'Matching') {
+        const pairs = parsedOptions.map(opt => {
+          const partRegex = /\s*([-➔➔>]+|:)\s*/;
+          const parts = opt.text.split(partRegex);
+          if (parts.length >= 2) {
+            const rightPart = parts[parts.length - 1];
+            const leftPart = opt.text.substring(0, opt.text.lastIndexOf(parts[parts.length - 2])).trim();
+            return { left: leftPart || opt.text, right: rightPart };
+          }
+          return { left: opt.text, right: '' };
+        });
+        setMatchingPairs(pairs.length > 0 ? pairs : [{ left: '', right: '' }]);
+      } 
+      else if (detectedType === 'Sequence Ordering') {
+        setSequenceList(parsedOptions.map(o => o.text));
+      } 
+      else if (detectedType === 'True/False Multiple') {
+        const rows = parsedOptions.map(opt => {
+          let cleanText = opt.text;
+          let isCorrect = true;
+          const lower = opt.text.toLowerCase();
+          if (lower.endsWith('sai') || lower.endsWith('(sai)') || lower.includes(': sai') || lower.includes('- sai')) {
+            isCorrect = false;
+            cleanText = opt.text.replace(/[:\-\s]*\(?sai\)?$/i, '').trim();
+          } else if (lower.endsWith('đúng') || lower.endsWith('(đúng)') || lower.includes(': đúng') || lower.includes('- đúng')) {
+            isCorrect = true;
+            cleanText = opt.text.replace(/[:\-\s]*\(?đúng\)?$/i, '').trim();
+          } else if (lower.endsWith('false') || lower.endsWith('(false)')) {
+            isCorrect = false;
+            cleanText = opt.text.replace(/[:\-\s]*\(?false\)?$/i, '').trim();
+          } else if (lower.endsWith('true') || lower.endsWith('(true)')) {
+            isCorrect = true;
+            cleanText = opt.text.replace(/[:\-\s]*\(?true\)?$/i, '').trim();
+          }
+          return { text: cleanText, correct: isCorrect };
+        });
+        setStmtRows(rows.length > 0 ? rows : [{ text: '', correct: true }]);
+      } 
+      else if (detectedType === 'Categorization') {
+        const items: { name: string; category: string }[] = [];
+        const categoriesSet = new Set<string>();
+        parsedOptions.forEach(opt => {
+          const parts = opt.text.split(/➔|->|:/);
+          if (parts.length >= 2) {
+            const name = parts[0].trim();
+            const category = parts[parts.length - 1].trim();
+            categoriesSet.add(category);
+            items.push({ name, category });
+          }
+        });
+        const categories = Array.from(categoriesSet);
+        if (categories.length >= 2) {
+          setCatCategories([categories[0], categories[1]]);
+          setCatItems(items);
+        } else {
+          setCatCategories(['Thiết bị Nhập (Input)', 'Thiết bị Xuất (Output)']);
+          setCatItems([{ name: '', category: 'Thiết bị Nhập (Input)' }]);
+        }
+      }
+
+      setParseStatus(`Đã tự động phân tích câu hỏi dạng "${detectedType}"!`);
+    } catch (err) {
+      console.error(err);
+      setParseStatus('Lỗi phân tích cú pháp câu hỏi.');
+    }
+  };
+
+  const handleContentChange = (val: string) => {
+    setQContent(val);
+    
+    // Auto-parse if the text contains a newline and structured cues
+    const lines = val.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length >= 2) {
+      const lowerVal = val.toLowerCase();
+      const hasCorrectMarker = lowerVal.includes('(correct)');
+      const hasOptionMarkers = lines.some(line => /^[a-fA-F0-9\-•][\.\)\s\-•]+\s*/.test(line));
+      const hasTrueFalseWord = lines.some(line => {
+        const lw = line.toLowerCase();
+        return lw.endsWith('đúng') || lw.endsWith('sai') || lw.endsWith('true') || lw.endsWith('false');
+      });
+      
+      if (hasCorrectMarker || hasOptionMarkers || hasTrueFalseWord) {
+        handleAutoParse(val);
+      }
+    }
+  };
+
   const loadStats = async () => {
     setLoadingStats(true);
     try {
@@ -393,6 +682,7 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
   // ==========================================
 
   const handleOpenQModal = (q: Question | null = null) => {
+    setParseStatus('');
     if (q) {
       setEditingQ(q);
       setQId(q.QuestionID);
@@ -1408,14 +1698,23 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
 
               {/* Question Content */}
               <div>
-                <label className="block mb-1.5 text-[10px] text-slate-400">NỘI DUNG CÂU HỎI</label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-[10px] text-slate-400 uppercase font-black">
+                    NỘI DUNG CÂU HỎI & CHỌN ĐÁP ÁN NHANH (Auto Parser)
+                  </label>
+                  {parseStatus && (
+                    <span className="text-[10px] text-emerald-600 font-black animate-pulse bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                      ✨ {parseStatus}
+                    </span>
+                  )}
+                </div>
                 <textarea
                   required
-                  rows={3}
-                  placeholder="Nhập mô tả đề bài chi tiết..."
+                  rows={5}
+                  placeholder="Dán trực tiếp toàn bộ câu hỏi và đáp án kèm dấu (Correct) để tự động điền form nhanh chóng...&#10;Ví dụ:&#10;Bạn cần lưu danh sách trang web...&#10;a. Duyệt đa trang một lúc&#10;b. Lịch sử hoặc dòng thời gian&#10;c. Mục yêu thích hoặc dấu trang (Correct)&#10;d. Hộp địa chỉ"
                   value={qContent}
-                  onChange={(e) => setQContent(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none text-slate-700 bg-slate-50/50 leading-relaxed font-semibold"
+                  onChange={(e) => handleContentChange(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none text-slate-700 bg-slate-50/50 leading-relaxed font-semibold placeholder:text-slate-400 text-xs"
                 />
               </div>
 
