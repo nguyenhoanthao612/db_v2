@@ -283,18 +283,8 @@ export class DatabaseService {
   public static async saveQuestion(question: Question): Promise<boolean> {
     this.initLocalStorage();
     const config = this.getSyncConfig();
-    let synced = false;
 
-    if (config.appsScriptUrl) {
-      try {
-        const res = await this.callAppsScript('saveQuestion', {}, { question });
-        synced = res.success;
-      } catch (e) {
-        console.error('Failed to sync saved question to Google Sheets', e);
-      }
-    }
-
-    // Save locally
+    // Save locally FIRST (Optimistic)
     const questions = getLocalStorage<Question[]>(this.KEY_QUESTIONS, initialQuestions);
     const idx = questions.findIndex(q => q.QuestionID === question.QuestionID);
     if (idx !== -1) {
@@ -322,6 +312,17 @@ export class DatabaseService {
       setLocalStorage(this.KEY_EXAMS, exams);
     }
 
+    // Call Google Sheets API in background (fire-and-forget)
+    if (config.appsScriptUrl) {
+      this.callAppsScript('saveQuestion', {}, { question })
+        .then(() => {
+          console.log('Successfully synced saved question to Google Sheets in background');
+        })
+        .catch(e => {
+          console.error('Failed to sync saved question to Google Sheets in background', e);
+        });
+    }
+
     return true;
   }
 
@@ -329,15 +330,7 @@ export class DatabaseService {
     this.initLocalStorage();
     const config = this.getSyncConfig();
 
-    if (config.appsScriptUrl) {
-      try {
-        await this.callAppsScript('deleteQuestion', {}, { questionId });
-      } catch (e) {
-        console.error('Failed to delete question from Google Sheets', e);
-      }
-    }
-
-    // Delete locally
+    // Delete locally FIRST (Optimistic)
     let questions = getLocalStorage<Question[]>(this.KEY_QUESTIONS, initialQuestions);
     const question = questions.find(q => q.QuestionID === questionId);
     questions = questions.filter(q => q.QuestionID !== questionId);
@@ -351,6 +344,17 @@ export class DatabaseService {
         exams[examIdx].QuestionIDs = exams[examIdx].QuestionIDs.filter(id => id !== questionId);
         setLocalStorage(this.KEY_EXAMS, exams);
       }
+    }
+
+    // Call Google Sheets in background (fire-and-forget)
+    if (config.appsScriptUrl) {
+      this.callAppsScript('deleteQuestion', {}, { questionId })
+        .then(() => {
+          console.log('Successfully synced deleted question to Google Sheets in background');
+        })
+        .catch(e => {
+          console.error('Failed to delete question from Google Sheets in background', e);
+        });
     }
 
     return true;
@@ -556,15 +560,7 @@ export class DatabaseService {
     this.initLocalStorage();
     const config = this.getSyncConfig();
 
-    if (config.appsScriptUrl) {
-      try {
-        await this.callAppsScript('saveStudent', {}, { student });
-      } catch (e) {
-        console.error('Failed to sync student to Google Sheets', e);
-      }
-    }
-
-    // Save locally
+    // Save locally FIRST (Optimistic)
     const students = getLocalStorage<Student[]>(this.KEY_STUDENTS, initialStudents);
     const idx = students.findIndex(s => s.StudentID === student.StudentID);
     if (idx !== -1) {
@@ -573,6 +569,18 @@ export class DatabaseService {
       students.push({ ...student, CreatedAt: new Date().toISOString() });
     }
     setLocalStorage(this.KEY_STUDENTS, students);
+
+    // Call Google Sheets API in background (fire-and-forget)
+    if (config.appsScriptUrl) {
+      this.callAppsScript('saveStudent', {}, { student })
+        .then(() => {
+          console.log('Successfully synced student to Google Sheets in background');
+        })
+        .catch(e => {
+          console.error('Failed to sync student to Google Sheets in background', e);
+        });
+    }
+
     return true;
   }
 
@@ -580,23 +588,26 @@ export class DatabaseService {
     this.initLocalStorage();
     const config = this.getSyncConfig();
 
-    if (config.appsScriptUrl) {
-      try {
-        await this.callAppsScript('deleteStudent', {}, { studentId });
-      } catch (e) {
-        console.error('Failed to delete student from Google Sheets', e);
-      }
-    }
-
-    // Delete locally
+    // Delete locally FIRST (Optimistic)
     let students = getLocalStorage<Student[]>(this.KEY_STUDENTS, initialStudents);
     students = students.filter(s => s.StudentID !== studentId);
     setLocalStorage(this.KEY_STUDENTS, students);
 
-    // Also delete score records
+    // Also delete score records locally (Optimistic)
     let scores = getLocalStorage<ScoreRecord[]>(this.KEY_SCORES, initialScores);
     scores = scores.filter(sc => sc.StudentID !== studentId);
     setLocalStorage(this.KEY_SCORES, scores);
+
+    // Call Google Sheets in background (fire-and-forget)
+    if (config.appsScriptUrl) {
+      this.callAppsScript('deleteStudent', {}, { studentId })
+        .then(() => {
+          console.log('Successfully synced deleted student to Google Sheets in background');
+        })
+        .catch(e => {
+          console.error('Failed to delete student from Google Sheets in background', e);
+        });
+    }
 
     return true;
   }
