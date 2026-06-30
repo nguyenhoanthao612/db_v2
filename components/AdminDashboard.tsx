@@ -129,6 +129,15 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
     { id: 'hotspot_1', name: 'Nút A', x: 10, y: 10, w: 20, h: 20 },
   ]);
   const [correctHotspotId, setCorrectHotspotId] = useState('hotspot_1');
+  const [draggingSpot, setDraggingSpot] = useState<{
+    id: string;
+    startX: number;
+    startY: number;
+    startSpotX: number;
+    startSpotY: number;
+    containerWidth: number;
+    containerHeight: number;
+  } | null>(null);
 
   // Match Image To Text
   const [imgTextPairs, setImgTextPairs] = useState<{ img: string; text: string }[]>([{ img: '', text: '' }]);
@@ -2141,6 +2150,7 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                           {/* Render hotspots as absolute overlays */}
                           {hotspotsList.map((spot, sIdx) => {
                             const isCorrect = correctHotspotId === spot.id;
+                            const isDragging = draggingSpot && draggingSpot.id === spot.id;
                             return (
                               <div
                                 key={spot.id || sIdx}
@@ -2148,21 +2158,69 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                                   e.stopPropagation(); // prevent clicking background image
                                   setCorrectHotspotId(spot.id);
                                 }}
-                                className={`absolute border-2 transition-all cursor-pointer flex items-center justify-center ${
+                                onPointerDown={(e) => {
+                                  const rect = e.currentTarget.parentElement?.getBoundingClientRect();
+                                  if (!rect) return;
+                                  
+                                  setDraggingSpot({
+                                    id: spot.id,
+                                    startX: e.clientX,
+                                    startY: e.clientY,
+                                    startSpotX: spot.x,
+                                    startSpotY: spot.y,
+                                    containerWidth: rect.width,
+                                    containerHeight: rect.height,
+                                  });
+                                  
+                                  setCorrectHotspotId(spot.id);
+                                  e.currentTarget.setPointerCapture(e.pointerId);
+                                  e.stopPropagation();
+                                }}
+                                onPointerMove={(e) => {
+                                  if (draggingSpot && draggingSpot.id === spot.id) {
+                                    const deltaX = e.clientX - draggingSpot.startX;
+                                    const deltaY = e.clientY - draggingSpot.startY;
+                                    
+                                    const deltaXPct = (deltaX / draggingSpot.containerWidth) * 100;
+                                    const deltaYPct = (deltaY / draggingSpot.containerHeight) * 100;
+                                    
+                                    const newX = Math.round(draggingSpot.startSpotX + deltaXPct);
+                                    const newY = Math.round(draggingSpot.startSpotY + deltaYPct);
+                                    
+                                    const boundedX = Math.max(0, Math.min(100 - spot.w, newX));
+                                    const boundedY = Math.max(0, Math.min(100 - spot.h, newY));
+                                    
+                                    const arr = [...hotspotsList];
+                                    const idx = arr.findIndex(h => h.id === spot.id);
+                                    if (idx !== -1) {
+                                      arr[idx].x = boundedX;
+                                      arr[idx].y = boundedY;
+                                      setHotspotsList(arr);
+                                    }
+                                  }
+                                }}
+                                onPointerUp={(e) => {
+                                  if (draggingSpot && draggingSpot.id === spot.id) {
+                                    e.currentTarget.releasePointerCapture(e.pointerId);
+                                    setDraggingSpot(null);
+                                  }
+                                }}
+                                className={`absolute border-2 cursor-move flex items-center justify-center select-none ${
                                   isCorrect
                                     ? 'bg-emerald-500/25 border-emerald-500 ring-4 ring-emerald-300/30'
                                     : 'bg-blue-500/15 border-blue-400 hover:bg-blue-500/30'
-                                }`}
+                                } ${isDragging ? 'z-50 border-dashed border-yellow-400' : 'transition-all duration-150'}`}
                                 style={{
                                   left: `${spot.x}%`,
                                   top: `${spot.y}%`,
                                   width: `${spot.w}%`,
                                   height: `${spot.h}%`,
                                   transform: 'translate(0, 0)', // ensure coordinates start from top-left of area
+                                  touchAction: 'none', // prevents scrolling while dragging on touch devices
                                 }}
-                                title={`${spot.name || spot.id} (Click để đổi đáp án đúng)`}
+                                title={`${spot.name || spot.id} (Nhấn giữ chuột để kéo thả di chuyển vùng)`}
                               >
-                                <span className="bg-slate-900/80 text-white font-extrabold px-1 rounded text-[8px] truncate max-w-[90%] scale-90">
+                                <span className="bg-slate-900/80 text-white font-extrabold px-1.5 py-0.5 rounded text-[8px] truncate max-w-[90%] scale-90 shadow-sm pointer-events-none">
                                   {spot.name || spot.id}
                                 </span>
                               </div>
@@ -2172,8 +2230,9 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                         <div className="bg-blue-50/80 text-blue-700 p-2.5 rounded-xl text-[9px] leading-normal font-medium">
                           💡 <strong>Hướng dẫn:</strong> 
                           <ul className="list-disc pl-4 mt-1 space-y-0.5">
-                            <li>Click vào một hộp màu trên ảnh để chọn vùng đó làm câu trả lời <strong>ĐÚNG</strong>.</li>
-                            <li>Click vào điểm bất kỳ trên ảnh để <strong>di chuyển tâm (X, Y)</strong> của vùng đang chọn sang vị trí đó.</li>
+                            <li>Click vào một vùng trên ảnh để chọn vùng đó làm câu trả lời <strong>ĐÚNG</strong>.</li>
+                            <li><strong>Kéo và thả (Drag & Drop):</strong> Nhấn giữ chuột vào hộp màu và kéo để di chuyển vị trí của vùng trực quan trên hình ảnh.</li>
+                            <li>Click vào điểm bất kỳ trên ảnh nền để <strong>di chuyển nhanh tâm</strong> của vùng đang chọn sang vị trí đó.</li>
                             <li>Điều chỉnh kích thước (Rộng/Cao) của từng vùng bằng các ô số bên dưới.</li>
                           </ul>
                         </div>
