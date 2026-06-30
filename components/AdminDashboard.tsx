@@ -2104,9 +2104,88 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
 
                 {/* 9. Hotspot */}
                 {qType === 'Hotspot' && (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
+                    {/* Visual Preview Section */}
+                    {qImageUrl ? (
+                      <div className="bg-slate-50 p-4 border border-slate-200 rounded-2xl space-y-2.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">
+                            TRỰC QUAN SƠ ĐỒ & VÙNG CHỌN (Click để định vị nhanh)
+                          </span>
+                          <span className="text-[9px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded font-bold">
+                            Đang chọn: {correctHotspotId || 'Chưa chọn'}
+                          </span>
+                        </div>
+
+                        <div className="relative border border-slate-200 rounded-xl overflow-hidden bg-slate-950 select-none max-w-xl mx-auto shadow-inner">
+                          <img
+                            src={qImageUrl}
+                            alt="Hotspot positioning preview"
+                            className="w-full h-auto opacity-90 max-h-[350px] object-contain cursor-crosshair"
+                            onClick={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const clickX = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+                              const clickY = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+                              
+                              if (hotspotsList.length > 0) {
+                                const activeIdx = hotspotsList.findIndex(h => h.id === correctHotspotId);
+                                const targetIdx = activeIdx !== -1 ? activeIdx : 0;
+                                const arr = [...hotspotsList];
+                                arr[targetIdx].x = Math.max(0, Math.min(100, clickX));
+                                arr[targetIdx].y = Math.max(0, Math.min(100, clickY));
+                                setHotspotsList(arr);
+                              }
+                            }}
+                          />
+
+                          {/* Render hotspots as absolute overlays */}
+                          {hotspotsList.map((spot, sIdx) => {
+                            const isCorrect = correctHotspotId === spot.id;
+                            return (
+                              <div
+                                key={spot.id || sIdx}
+                                onClick={(e) => {
+                                  e.stopPropagation(); // prevent clicking background image
+                                  setCorrectHotspotId(spot.id);
+                                }}
+                                className={`absolute border-2 transition-all cursor-pointer flex items-center justify-center ${
+                                  isCorrect
+                                    ? 'bg-emerald-500/25 border-emerald-500 ring-4 ring-emerald-300/30'
+                                    : 'bg-blue-500/15 border-blue-400 hover:bg-blue-500/30'
+                                }`}
+                                style={{
+                                  left: `${spot.x}%`,
+                                  top: `${spot.y}%`,
+                                  width: `${spot.w}%`,
+                                  height: `${spot.h}%`,
+                                  transform: 'translate(0, 0)', // ensure coordinates start from top-left of area
+                                }}
+                                title={`${spot.name || spot.id} (Click để đổi đáp án đúng)`}
+                              >
+                                <span className="bg-slate-900/80 text-white font-extrabold px-1 rounded text-[8px] truncate max-w-[90%] scale-90">
+                                  {spot.name || spot.id}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="bg-blue-50/80 text-blue-700 p-2.5 rounded-xl text-[9px] leading-normal font-medium">
+                          💡 <strong>Hướng dẫn:</strong> 
+                          <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                            <li>Click vào một hộp màu trên ảnh để chọn vùng đó làm câu trả lời <strong>ĐÚNG</strong>.</li>
+                            <li>Click vào điểm bất kỳ trên ảnh để <strong>di chuyển tâm (X, Y)</strong> của vùng đang chọn sang vị trí đó.</li>
+                            <li>Điều chỉnh kích thước (Rộng/Cao) của từng vùng bằng các ô số bên dưới.</li>
+                          </ul>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-amber-50 border border-amber-200 text-amber-700 p-3 rounded-xl text-[10px] font-bold text-center">
+                        ⚠️ Chưa nhập <strong>ẢNH MINH HỌA (URL)</strong> ở phía trên. Vui lòng nhập link ảnh trước để xem trước sơ đồ hotspot và cấu hình vùng chọn trực quan!
+                      </div>
+                    )}
+
                     <div className="flex justify-between items-center">
-                      <span className="text-[10px] text-slate-400 uppercase">Danh sách vùng chọn (tọa độ %)</span>
+                      <span className="text-[10px] text-slate-400 uppercase font-extrabold tracking-wider">Danh sách vùng chọn (tọa độ %)</span>
                       <button
                         type="button"
                         onClick={() =>
@@ -2115,7 +2194,7 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                             { id: `hotspot_${hotspotsList.length + 1}`, name: '', x: 20, y: 20, w: 15, h: 15 },
                           ])
                         }
-                        className="px-2 py-1 bg-blue-500 text-white rounded text-[10px]"
+                        className="px-2 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-[10px] font-bold cursor-pointer transition"
                       >
                         Thêm vùng chọn +
                       </button>
@@ -2135,7 +2214,7 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                                 arr[idx].id = e.target.value;
                                 setHotspotsList(arr);
                               }}
-                              className="w-24 px-2 py-1 border border-slate-200 rounded text-slate-700 bg-slate-50"
+                              className="w-24 px-2 py-1 border border-slate-200 rounded text-slate-700 bg-slate-50 font-bold"
                             />
                             <input
                               type="text"
@@ -2153,7 +2232,7 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                               type="button"
                               onClick={() => setCorrectHotspotId(spot.id)}
                               className={`px-2 py-1 rounded text-[9px] font-black transition cursor-pointer ${
-                                correctHotspotId === spot.id ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-400'
+                                correctHotspotId === spot.id ? 'bg-green-500 text-white shadow-sm' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
                               }`}
                             >
                               ĐÚNG
@@ -2162,7 +2241,7 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                               <button
                                 type="button"
                                 onClick={() => setHotspotsList(hotspotsList.filter((_, i) => i !== idx))}
-                                className="text-red-500"
+                                className="text-red-500 hover:text-red-700 font-bold"
                               >
                                 Xóa
                               </button>
@@ -2175,6 +2254,8 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                               <input
                                 type="number"
                                 required
+                                min={0}
+                                max={100}
                                 value={spot.x}
                                 onChange={(e) => {
                                   const arr = [...hotspotsList];
@@ -2189,6 +2270,8 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                               <input
                                 type="number"
                                 required
+                                min={0}
+                                max={100}
                                 value={spot.y}
                                 onChange={(e) => {
                                   const arr = [...hotspotsList];
@@ -2203,6 +2286,8 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                               <input
                                 type="number"
                                 required
+                                min={1}
+                                max={100}
                                 value={spot.w}
                                 onChange={(e) => {
                                   const arr = [...hotspotsList];
@@ -2217,6 +2302,8 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                               <input
                                 type="number"
                                 required
+                                min={1}
+                                max={100}
                                 value={spot.h}
                                 onChange={(e) => {
                                   const arr = [...hotspotsList];
