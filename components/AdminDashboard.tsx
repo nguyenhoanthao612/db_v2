@@ -138,6 +138,26 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
     containerWidth: number;
     containerHeight: number;
   } | null>(null);
+  const [drawingRect, setDrawingRect] = useState<{
+    startX: number;
+    startY: number;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  } | null>(null);
+  const [resizingSpot, setResizingSpot] = useState<{
+    id: string;
+    handle: string;
+    startX: number;
+    startY: number;
+    startSpotX: number;
+    startSpotY: number;
+    startSpotW: number;
+    startSpotH: number;
+    containerWidth: number;
+    containerHeight: number;
+  } | null>(null);
 
   // Match Image To Text
   const [imgTextPairs, setImgTextPairs] = useState<{ img: string; text: string }[]>([{ img: '', text: '' }]);
@@ -2126,25 +2146,91 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                           </span>
                         </div>
 
-                        <div className="relative border border-slate-200 rounded-xl overflow-hidden bg-slate-950 select-none max-w-xl mx-auto shadow-inner">
+                        <div 
+                          className="relative border border-slate-200 rounded-xl overflow-hidden bg-slate-950 select-none max-w-xl mx-auto shadow-inner"
+                          onPointerDown={(e) => {
+                            // Only start drawing if clicking on the wrapper itself or on the image (not on existing spots or resize handles)
+                            if (e.target !== e.currentTarget && (e.target as HTMLElement).tagName !== 'IMG') {
+                              return;
+                            }
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const startXPct = ((e.clientX - rect.left) / rect.width) * 100;
+                            const startYPct = ((e.clientY - rect.top) / rect.height) * 100;
+
+                            setDrawingRect({
+                              startX: startXPct,
+                              startY: startYPct,
+                              x: startXPct,
+                              y: startYPct,
+                              w: 0,
+                              h: 0,
+                            });
+                            
+                            e.currentTarget.setPointerCapture(e.pointerId);
+                          }}
+                          onPointerMove={(e) => {
+                            if (drawingRect) {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const currXPct = ((e.clientX - rect.left) / rect.width) * 100;
+                              const currYPct = ((e.clientY - rect.top) / rect.height) * 100;
+
+                              const x1 = Math.max(0, Math.min(100, Math.min(drawingRect.startX, currXPct)));
+                              const y1 = Math.max(0, Math.min(100, Math.min(drawingRect.startY, currYPct)));
+                              const x2 = Math.max(0, Math.min(100, Math.max(drawingRect.startX, currXPct)));
+                              const y2 = Math.max(0, Math.min(100, Math.max(drawingRect.startY, currYPct)));
+
+                              setDrawingRect({
+                                startX: drawingRect.startX,
+                                startY: drawingRect.startY,
+                                x: x1,
+                                y: y1,
+                                w: x2 - x1,
+                                h: y2 - y1,
+                              });
+                            }
+                          }}
+                          onPointerUp={(e) => {
+                            if (drawingRect) {
+                              e.currentTarget.releasePointerCapture(e.pointerId);
+                              
+                              // If drag width & height are tiny, treat it as a click to center the active hotspot
+                              if (drawingRect.w <= 1.5 && drawingRect.h <= 1.5) {
+                                if (hotspotsList.length > 0) {
+                                  const activeIdx = hotspotsList.findIndex(h => h.id === correctHotspotId);
+                                  const targetIdx = activeIdx !== -1 ? activeIdx : 0;
+                                  const arr = [...hotspotsList];
+                                  const spot = arr[targetIdx];
+                                  const newX = Math.round(drawingRect.x - spot.w / 2);
+                                  const newY = Math.round(drawingRect.y - spot.h / 2);
+                                  spot.x = Math.max(0, Math.min(100 - spot.w, newX));
+                                  spot.y = Math.max(0, Math.min(100 - spot.h, newY));
+                                  setHotspotsList(arr);
+                                }
+                              } else {
+                                // Create a new hotspot with these coordinates!
+                                const nextNum = hotspotsList.length + 1;
+                                const nextId = `hotspot_${Date.now()}`;
+                                const nameLetters = 'ABCDEFGHJKLMNOPQRSTUVWXYZ';
+                                const nextLetter = nameLetters[nextNum - 1] || `${nextNum}`;
+                                const newSpot = {
+                                  id: nextId,
+                                  name: `Vùng ${nextLetter}`,
+                                  x: Math.round(drawingRect.x),
+                                  y: Math.round(drawingRect.y),
+                                  w: Math.round(drawingRect.w),
+                                  h: Math.round(drawingRect.h),
+                                };
+                                setHotspotsList([...hotspotsList, newSpot]);
+                                setCorrectHotspotId(nextId);
+                              }
+                              setDrawingRect(null);
+                            }
+                          }}
+                        >
                           <img
                             src={qImageUrl}
                             alt="Hotspot positioning preview"
-                            className="w-full h-auto opacity-90 max-h-[350px] object-contain cursor-crosshair"
-                            onClick={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const clickX = Math.round(((e.clientX - rect.left) / rect.width) * 100);
-                              const clickY = Math.round(((e.clientY - rect.top) / rect.height) * 100);
-                              
-                              if (hotspotsList.length > 0) {
-                                const activeIdx = hotspotsList.findIndex(h => h.id === correctHotspotId);
-                                const targetIdx = activeIdx !== -1 ? activeIdx : 0;
-                                const arr = [...hotspotsList];
-                                arr[targetIdx].x = Math.max(0, Math.min(100, clickX));
-                                arr[targetIdx].y = Math.max(0, Math.min(100, clickY));
-                                setHotspotsList(arr);
-                              }
-                            }}
+                            className="w-full h-auto opacity-90 max-h-[350px] object-contain cursor-crosshair pointer-events-none"
                           />
 
                           {/* Render hotspots as absolute overlays */}
@@ -2223,9 +2309,133 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                                 <span className="bg-slate-900/80 text-white font-extrabold px-1.5 py-0.5 rounded text-[8px] truncate max-w-[90%] scale-90 shadow-sm pointer-events-none">
                                   {spot.name || spot.id}
                                 </span>
+
+                                {/* 8 resize handles for the currently selected hotspot */}
+                                {isCorrect && (
+                                  <>
+                                    {[
+                                      { handle: 'tl', cursor: 'nwse-resize', class: 'left-0 top-0 -translate-x-1/2 -translate-y-1/2' },
+                                      { handle: 'tc', cursor: 'ns-resize', class: 'left-1/2 top-0 -translate-x-1/2 -translate-y-1/2' },
+                                      { handle: 'tr', cursor: 'nesw-resize', class: 'right-0 top-0 translate-x-1/2 -translate-y-1/2' },
+                                      { handle: 'mr', cursor: 'ew-resize', class: 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2' },
+                                      { handle: 'br', cursor: 'nwse-resize', class: 'right-0 bottom-0 translate-x-1/2 translate-y-1/2' },
+                                      { handle: 'bc', cursor: 'ns-resize', class: 'left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2' },
+                                      { handle: 'bl', cursor: 'nesw-resize', class: 'left-0 bottom-0 -translate-x-1/2 translate-y-1/2' },
+                                      { handle: 'ml', cursor: 'ew-resize', class: 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2' },
+                                    ].map((hSpec) => (
+                                      <div
+                                        key={hSpec.handle}
+                                        onPointerDown={(e) => {
+                                          const rect = e.currentTarget.parentElement?.parentElement?.getBoundingClientRect();
+                                          if (!rect) return;
+                                          
+                                          setResizingSpot({
+                                            id: spot.id,
+                                            handle: hSpec.handle,
+                                            startX: e.clientX,
+                                            startY: e.clientY,
+                                            startSpotX: spot.x,
+                                            startSpotY: spot.y,
+                                            startSpotW: spot.w,
+                                            startSpotH: spot.h,
+                                            containerWidth: rect.width,
+                                            containerHeight: rect.height,
+                                          });
+                                          
+                                          e.currentTarget.setPointerCapture(e.pointerId);
+                                          e.stopPropagation();
+                                        }}
+                                        onPointerMove={(e) => {
+                                          if (resizingSpot && resizingSpot.id === spot.id && resizingSpot.handle === hSpec.handle) {
+                                            const deltaX = e.clientX - resizingSpot.startX;
+                                            const deltaY = e.clientY - resizingSpot.startY;
+                                            
+                                            const deltaXPct = (deltaX / resizingSpot.containerWidth) * 100;
+                                            const deltaYPct = (deltaY / resizingSpot.containerHeight) * 100;
+                                            
+                                            let newX = resizingSpot.startSpotX;
+                                            let newY = resizingSpot.startSpotY;
+                                            let newW = resizingSpot.startSpotW;
+                                            let newH = resizingSpot.startSpotH;
+                                            
+                                            const handle = resizingSpot.handle;
+                                            
+                                            // Adjust coordinates based on which handle is being dragged
+                                            if (handle.includes('l')) {
+                                              // drag left: adjusts x and w
+                                              const prospectiveX = resizingSpot.startSpotX + deltaXPct;
+                                              const prospectiveW = resizingSpot.startSpotW - deltaXPct;
+                                              if (prospectiveW >= 2) {
+                                                newX = Math.max(0, Math.min(100, prospectiveX));
+                                                newW = prospectiveW;
+                                              }
+                                            }
+                                            if (handle.includes('r')) {
+                                              // drag right: adjusts w only
+                                              const prospectiveW = resizingSpot.startSpotW + deltaXPct;
+                                              if (prospectiveW >= 2) {
+                                                newW = Math.min(100 - resizingSpot.startSpotX, prospectiveW);
+                                              }
+                                            }
+                                            if (handle.includes('t')) {
+                                              // drag top: adjusts y and h
+                                              const prospectiveY = resizingSpot.startSpotY + deltaYPct;
+                                              const prospectiveH = resizingSpot.startSpotH - deltaYPct;
+                                              if (prospectiveH >= 2) {
+                                                newY = Math.max(0, Math.min(100, prospectiveY));
+                                                newH = prospectiveH;
+                                              }
+                                            }
+                                            if (handle.includes('b')) {
+                                              // drag bottom: adjusts h only
+                                              const prospectiveH = resizingSpot.startSpotH + deltaYPct;
+                                              if (prospectiveH >= 2) {
+                                                newH = Math.min(100 - resizingSpot.startSpotY, prospectiveH);
+                                              }
+                                            }
+                                            
+                                            const arr = [...hotspotsList];
+                                            const idx = arr.findIndex(h => h.id === spot.id);
+                                            if (idx !== -1) {
+                                              arr[idx].x = Math.round(newX);
+                                              arr[idx].y = Math.round(newY);
+                                              arr[idx].w = Math.round(newW);
+                                              arr[idx].h = Math.round(newH);
+                                              setHotspotsList(arr);
+                                            }
+                                          }
+                                        }}
+                                        onPointerUp={(e) => {
+                                          if (resizingSpot && resizingSpot.id === spot.id && resizingSpot.handle === hSpec.handle) {
+                                            e.currentTarget.releasePointerCapture(e.pointerId);
+                                            setResizingSpot(null);
+                                          }
+                                        }}
+                                        className={`absolute w-2.5 h-2.5 bg-white border border-indigo-600 rounded-sm shadow-md ${hSpec.class} z-30`}
+                                        style={{
+                                          cursor: hSpec.cursor,
+                                          touchAction: 'none',
+                                        }}
+                                      />
+                                    ))}
+                                  </>
+                                )}
                               </div>
                             );
                           })}
+
+                          {/* Drawing Rect Preview */}
+                          {drawingRect && (
+                            <div
+                              className="absolute border-2 border-dashed border-indigo-500 bg-indigo-500/20 pointer-events-none z-40"
+                              style={{
+                                left: `${drawingRect.x}%`,
+                                top: `${drawingRect.y}%`,
+                                width: `${drawingRect.w}%`,
+                                height: `${drawingRect.h}%`,
+                              }}
+                            />
+                          )}
                         </div>
                         <div className="bg-blue-50/80 text-blue-700 p-2.5 rounded-xl text-[9px] leading-normal font-medium">
                           💡 <strong>Hướng dẫn:</strong> 
