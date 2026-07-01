@@ -86,28 +86,58 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
 
   const [shuffledImageIndices, setShuffledImageIndices] = useState<number[]>([]);
   const [selectedMatchImgIdx, setSelectedMatchImgIdx] = useState<number | null>(null);
+  const [shuffledRightOptions, setShuffledRightOptions] = useState<string[]>([]);
+  const [selectedMatchingRightOpt, setSelectedMatchingRightOpt] = useState<string | null>(null);
 
-  // Monitor current index to generate shuffled images indices for Match Image To Text
+  // Monitor current index to generate shuffled images indices or shuffled right options
   useEffect(() => {
     const q = questions[currentIdx];
-    if (q && q.QuestionType === 'Match Image To Text') {
-      try {
-        const parsed: QuestionAnswers = JSON.parse(q.Answers);
-        if (parsed.imageOptions) {
-          const indices = parsed.imageOptions.map((_, i) => i);
-          const shuffled = [...indices].sort(() => Math.random() - 0.5);
-          setTimeout(() => {
-            setSelectedMatchImgIdx(null);
-            setShuffledImageIndices(shuffled);
-          }, 0);
+    if (q) {
+      if (q.QuestionType === 'Match Image To Text') {
+        try {
+          const parsed: QuestionAnswers = JSON.parse(q.Answers);
+          if (parsed.imageOptions) {
+            const indices = parsed.imageOptions.map((_, i) => i);
+            const shuffled = [...indices].sort(() => Math.random() - 0.5);
+            setTimeout(() => {
+              setSelectedMatchImgIdx(null);
+              setShuffledImageIndices(shuffled);
+              setSelectedMatchingRightOpt(null);
+              setShuffledRightOptions([]);
+            }, 0);
+          }
+        } catch (e) {
+          console.error(e);
         }
-      } catch (e) {
-        console.error(e);
+      } else if (q.QuestionType === 'Matching') {
+        try {
+          const parsed: QuestionAnswers = JSON.parse(q.Answers);
+          if (parsed.rightOptions) {
+            const shuffled = [...parsed.rightOptions].sort(() => Math.random() - 0.5);
+            setTimeout(() => {
+              setSelectedMatchImgIdx(null);
+              setShuffledImageIndices([]);
+              setSelectedMatchingRightOpt(null);
+              setShuffledRightOptions(shuffled);
+            }, 0);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        setTimeout(() => {
+          setSelectedMatchImgIdx(null);
+          setShuffledImageIndices([]);
+          setSelectedMatchingRightOpt(null);
+          setShuffledRightOptions([]);
+        }, 0);
       }
     } else {
       setTimeout(() => {
         setSelectedMatchImgIdx(null);
         setShuffledImageIndices([]);
+        setSelectedMatchingRightOpt(null);
+        setShuffledRightOptions([]);
       }, 0);
     }
   }, [currentIdx, questions]);
@@ -480,86 +510,200 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                   </div>
                 )}
 
-                {/* 4. MATCHING (Premium Select-to-pair Interface) */}
-                {currentQ.QuestionType === 'Matching' && parsedAnswers.leftOptions && parsedAnswers.rightOptions && (
-                  <div className="space-y-4">
-                    <p className="text-xs text-blue-600 font-bold mb-3 bg-blue-50 p-2.5 rounded-lg">
-                      💡 Click chọn một mục bên trái, sau đó click chọn một mục tương ứng bên phải để nối cặp.
-                    </p>
+                {/* 4. MATCHING (Premium Drag & Drop / Tap-to-Pair Interface) */}
+                {currentQ.QuestionType === 'Matching' && parsedAnswers.leftOptions && parsedAnswers.rightOptions && (() => {
+                  const currentAnsMap = currentAnswer || {};
+                  const unassignedRightOptions = (shuffledRightOptions.length > 0 ? shuffledRightOptions : parsedAnswers.rightOptions).filter(
+                    rOpt => !Object.values(currentAnsMap).includes(rOpt)
+                  );
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Left side items */}
-                      <div className="space-y-2">
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">Danh sách bên trái</p>
-                        {parsedAnswers.leftOptions.map((leftItem) => {
-                          const pairedRight = (currentAnswer || {})[leftItem];
-                          return (
-                            <div
-                              key={leftItem}
-                              className={`p-3.5 rounded-xl border text-xs leading-relaxed ${
-                                pairedRight
-                                  ? 'bg-blue-50/50 border-blue-200 text-blue-800 font-bold'
-                                  : 'bg-slate-50 border-slate-200 text-slate-600'
-                              }`}
-                            >
-                              <div className="font-bold mb-1.5">{leftItem}</div>
-                              {pairedRight ? (
-                                <div className="text-[11px] text-green-600 bg-white border border-green-200 py-1 px-2.5 rounded-md flex items-center justify-between gap-2">
-                                  <span>↳ Đã ghép với: {pairedRight.slice(0, 40)}...</span>
-                                  <button
-                                    onClick={() => {
-                                      const updated = { ...currentAnswer };
-                                      delete updated[leftItem];
-                                      handleSelectAnswer(currentQ.QuestionID, updated);
-                                    }}
-                                    className="text-red-400 hover:text-red-600 text-[10px] font-bold"
-                                  >
-                                    Hủy nối
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className="text-[10px] text-slate-400 font-bold">Chưa ghép đôi</span>
-                              )}
-                            </div>
-                          );
-                        })}
+                  return (
+                    <div className="space-y-4">
+                      <div className="bg-indigo-50 border border-indigo-100 text-indigo-700 p-3.5 rounded-2xl text-xs font-bold leading-relaxed shadow-sm">
+                        💡 <strong>Hướng dẫn ghép đôi (Kéo thả):</strong>
+                        <ul className="list-disc pl-4 mt-1 space-y-1 font-medium text-indigo-600">
+                          <li><strong>Cách 1:</strong> Kéo các mục ở cột bên phải và thả vào ô trống tương ứng bên cạnh mục ở cột bên trái.</li>
+                          <li><strong>Cách 2 (Trên điện thoại):</strong> Nhấp vào mục ở cột bên phải để chọn (sẽ có viền xanh nhấp nháy), sau đó chạm vào ô trống bên trái để ghép cặp.</li>
+                        </ul>
                       </div>
 
-                      {/* Right side items & Selection Pairing Panel */}
-                      <div className="space-y-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">Thiết lập cặp nối</p>
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                        {/* LEFT COLUMN: DESCRIPTION SLOTS */}
+                        <div className="md:col-span-7 space-y-3">
+                          <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Cột Trái: Danh sách phát biểu</h4>
+                          
+                          {parsedAnswers.leftOptions.map((leftVal, idx) => {
+                            const pairedRight = currentAnsMap[leftVal];
+                            const hasMatch = !!pairedRight;
 
-                        <div className="space-y-2.5">
-                          {parsedAnswers.leftOptions.map((leftVal) => (
-                            <div key={leftVal} className="flex flex-col gap-1">
-                              <span className="text-[10px] font-extrabold text-slate-500">Đối với &quot;{leftVal}&quot; ghép với:</span>
-                              <select
-                                value={currentAnswer?.[leftVal] || ''}
-                                onChange={(e) => {
-                                  const updated = { ...(currentAnswer || {}) };
-                                  if (e.target.value === '') {
-                                    delete updated[leftVal];
-                                  } else {
-                                    updated[leftVal] = e.target.value;
-                                  }
-                                  handleSelectAnswer(currentQ.QuestionID, updated);
-                                }}
-                                className="w-full text-xs p-2 rounded-lg border border-slate-200 focus:outline-none bg-white font-bold text-slate-600"
+                            return (
+                              <div 
+                                key={leftVal} 
+                                className="flex items-center gap-3 bg-white border border-slate-200/80 rounded-2xl p-3 min-h-[90px] shadow-sm hover:shadow transition"
                               >
-                                <option value="">-- Chưa kết nối --</option>
-                                {parsedAnswers.rightOptions?.map((rOpt) => (
-                                  <option key={rOpt} value={rOpt}>
-                                    {rOpt}
-                                  </option>
-                                ))}
-                              </select>
+                                {/* Left option text card */}
+                                <div className="flex-1 flex gap-2 items-start">
+                                  <span className="flex items-center justify-center w-5 h-5 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black mt-0.5 flex-shrink-0">
+                                    {idx + 1}
+                                  </span>
+                                  <p className="text-xs font-bold text-slate-700 leading-relaxed">
+                                    {leftVal}
+                                  </p>
+                                </div>
+
+                                <div className="text-slate-300 font-extrabold text-sm select-none">➔</div>
+
+                                {/* Drop / Match Slot */}
+                                <div
+                                  className={`relative w-44 min-h-[70px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-2.5 transition-all flex-shrink-0 ${
+                                    hasMatch 
+                                      ? 'border-indigo-200 bg-indigo-50/20' 
+                                      : selectedMatchingRightOpt !== null
+                                        ? 'border-indigo-400 bg-indigo-50 animate-pulse cursor-pointer'
+                                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'
+                                  }`}
+                                  onDragOver={(e) => e.preventDefault()}
+                                  onDragEnter={(e) => {
+                                    e.preventDefault();
+                                    e.currentTarget.classList.add('border-indigo-500', 'bg-indigo-50');
+                                  }}
+                                  onDragLeave={(e) => {
+                                    e.preventDefault();
+                                    e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
+                                  }}
+                                  onDrop={(e) => {
+                                    e.preventDefault();
+                                    e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
+                                    const rightVal = e.dataTransfer.getData("text/plain");
+                                    if (rightVal && rightVal !== "") {
+                                      const updated = { ...currentAnsMap };
+                                      // Clear any existing pairing mapping to this same rightVal to maintain 1-to-1
+                                      Object.keys(updated).forEach((k) => {
+                                        if (updated[k] === rightVal) {
+                                          delete updated[k];
+                                        }
+                                      });
+                                      updated[leftVal] = rightVal;
+                                      handleSelectAnswer(currentQ.QuestionID, updated);
+                                      setSelectedMatchingRightOpt(null);
+                                    }
+                                  }}
+                                  onClick={() => {
+                                    if (selectedMatchingRightOpt !== null) {
+                                      const updated = { ...currentAnsMap };
+                                      Object.keys(updated).forEach((k) => {
+                                        if (updated[k] === selectedMatchingRightOpt) {
+                                          delete updated[k];
+                                        }
+                                      });
+                                      updated[leftVal] = selectedMatchingRightOpt;
+                                      handleSelectAnswer(currentQ.QuestionID, updated);
+                                      setSelectedMatchingRightOpt(null);
+                                    }
+                                  }}
+                                >
+                                  {hasMatch ? (
+                                    <div className="relative w-full text-center text-[11px] font-bold text-slate-700 bg-white border border-slate-200 p-2 rounded-lg leading-snug shadow-sm">
+                                      <span>{pairedRight}</span>
+                                      {/* Remove Assignment button */}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const updated = { ...currentAnsMap };
+                                          delete updated[leftVal];
+                                          handleSelectAnswer(currentQ.QuestionID, updated);
+                                        }}
+                                        className="absolute -top-2 -right-2 bg-rose-500 hover:bg-rose-600 text-white p-0.5 rounded-full shadow transition-transform hover:scale-110 cursor-pointer"
+                                        title="Hủy ghép cặp"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="text-center pointer-events-none select-none p-1">
+                                      <span className="text-[10px] font-extrabold text-slate-400 block leading-tight">
+                                        {selectedMatchingRightOpt !== null ? 'Chạm để thả' : 'Kéo thả vào đây'}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* RIGHT COLUMN: POOL OF RIGHT OPTIONS */}
+                        <div className="md:col-span-5 bg-slate-50 border border-slate-200/60 rounded-2xl p-4 min-h-[300px]">
+                          <div className="flex justify-between items-center mb-3">
+                            <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider">Cột Phải: Phương án ghép đôi</h4>
+                            <span className="text-[10px] font-extrabold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
+                              Còn {unassignedRightOptions.length} phương án
+                            </span>
+                          </div>
+
+                          {unassignedRightOptions.length > 0 ? (
+                            <div className="space-y-2">
+                              {unassignedRightOptions.map((rOpt) => {
+                                const isSelected = selectedMatchingRightOpt === rOpt;
+
+                                return (
+                                  <div
+                                    key={rOpt}
+                                    draggable
+                                    onDragStart={(e) => {
+                                      e.dataTransfer.setData("text/plain", rOpt);
+                                      setSelectedMatchingRightOpt(rOpt);
+                                    }}
+                                    onDragEnd={() => {
+                                      // Optional clean-up
+                                    }}
+                                    onClick={() => {
+                                      if (isSelected) {
+                                        setSelectedMatchingRightOpt(null);
+                                      } else {
+                                        setSelectedMatchingRightOpt(rOpt);
+                                      }
+                                    }}
+                                    className={`p-3 rounded-xl border bg-white shadow-sm cursor-grab active:cursor-grabbing transition text-xs font-bold leading-relaxed ${
+                                      isSelected 
+                                        ? 'border-indigo-500 ring-2 ring-indigo-500/10 bg-indigo-50/35 animate-pulse' 
+                                        : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+                                    }`}
+                                  >
+                                    <div className="flex gap-2 items-center">
+                                      <span className="text-indigo-500 font-extrabold">☰</span>
+                                      <span className="text-slate-700">{rOpt}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ))}
+                          ) : (
+                            <div className="h-44 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl bg-white p-4">
+                              <span className="text-green-500 font-bold text-xs mb-1">🎉 Hoàn thành ghép đôi!</span>
+                              <span className="text-[10px] text-slate-400 font-bold text-center">Tất cả phương án đã được ghép đôi phù hợp.</span>
+                            </div>
+                          )}
+
+                          {/* Reset button inside pool */}
+                          {Object.keys(currentAnsMap).length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleSelectAnswer(currentQ.QuestionID, {});
+                                setSelectedMatchingRightOpt(null);
+                              }}
+                              className="w-full mt-4 py-2 bg-slate-200/80 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition cursor-pointer"
+                            >
+                              Hủy tất cả các cặp ghép
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* 5. SEQUENCE ORDERING */}
                 {currentQ.QuestionType === 'Sequence Ordering' && (
