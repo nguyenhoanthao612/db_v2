@@ -2691,55 +2691,105 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
 
                 {/* 11. Matrix Selection */}
                 {qType === 'Matrix Selection' && (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3 text-[10px]">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <span className="text-slate-400 font-bold block mb-1">CÁC HÀNG (ngăn cách bởi dấu phẩy)</span>
-                        <input
-                          type="text"
-                          placeholder="Row1,Row2,Row3"
-                          value={matrixRows.join(',')}
-                          onChange={(e) => setMatrixRows(e.target.value.split(',').filter(Boolean))}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-slate-700 bg-white"
+                        <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                          Các hàng (Danh sách các phát biểu/câu hỏi phụ, cách nhau bởi dấu phẩy)
+                        </label>
+                        <textarea
+                          rows={2}
+                          placeholder="Khởi động trình quản lý tác vụ, Điều chỉnh âm lượng đầu ra âm thanh, Hiển thị cài đặt kết nối mạng"
+                          value={matrixRows.join(', ')}
+                          onChange={(e) => setMatrixRows(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20"
                         />
                       </div>
                       <div>
-                        <span className="text-slate-400 font-bold block mb-1">CÁC CỘT (ngăn cách bởi dấu phẩy)</span>
-                        <input
-                          type="text"
-                          placeholder="Col1,Col2,Col3"
-                          value={matrixCols.join(',')}
-                          onChange={(e) => setMatrixCols(e.target.value.split(',').filter(Boolean))}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-slate-700 bg-white"
+                        <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                          Các cột (Danh sách các phương án lựa chọn, cách nhau bởi dấu phẩy)
+                        </label>
+                        <textarea
+                          rows={2}
+                          placeholder="Có, Không"
+                          value={matrixCols.join(', ')}
+                          onChange={(e) => setMatrixCols(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20"
                         />
                       </div>
                     </div>
 
                     <div className="space-y-2 pt-2 border-t border-slate-100">
-                      <span className="text-[10px] text-slate-400 font-black uppercase">Đáp án ma trận ghép đúng:</span>
+                      <div className="flex flex-col mb-1.5">
+                        <span className="text-xs font-bold text-slate-700">Thiết lập & Xem trước ma trận đáp án đúng:</span>
+                        <span className="text-[9px] text-indigo-500 font-bold uppercase tracking-wider">💡 Nhấp trực tiếp vào vòng tròn để chọn đáp án đúng cho từng hàng</span>
+                      </div>
 
-                      {matrixRows.map((row) => (
-                        <div key={row} className="flex gap-2 items-center">
-                          <span className="w-24 truncate text-slate-600 font-bold">{row}:</span>
-                          <select
-                            value={matrixCorrect[row] || ''}
-                            onChange={(e) => {
-                              setMatrixCorrect({
-                                ...matrixCorrect,
-                                [row]: e.target.value,
-                              });
-                            }}
-                            className="flex-1 px-3 py-1 border border-slate-200 rounded bg-white text-xs"
-                          >
-                            <option value="">-- Chọn cột đúng --</option>
-                            {matrixCols.map((col) => (
-                              <option key={col} value={col}>
-                                {col}
-                              </option>
-                            ))}
-                          </select>
+                      {matrixRows.length > 0 && matrixCols.length > 0 ? (
+                        <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-sm bg-white">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr>
+                                <th className="p-3 border-b border-r border-slate-200 bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                  Nội dung / Phát biểu
+                                </th>
+                                {matrixCols.map((col, cIdx) => (
+                                  <th 
+                                    key={cIdx} 
+                                    className="p-3 text-center font-bold text-white bg-[#0066cc] border-b border-l border-slate-200 text-xs min-w-[90px] leading-tight select-none"
+                                  >
+                                    {col}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {matrixRows.map((row) => {
+                                const selectedCol = matrixCorrect[row];
+
+                                return (
+                                  <tr key={row} className="hover:bg-slate-50/50 transition">
+                                    {/* Row title on the left */}
+                                    <td className="p-3 border-b border-r border-slate-200 text-xs font-semibold text-slate-700 max-w-[280px] break-words">
+                                      {row}
+                                    </td>
+                                    {/* Options on the right */}
+                                    {matrixCols.map((col) => {
+                                      const isCorrect = selectedCol === col;
+
+                                      return (
+                                        <td key={col} className="p-3 border-b border-l border-slate-200 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setMatrixCorrect({
+                                                ...matrixCorrect,
+                                                [row]: col,
+                                              });
+                                            }}
+                                            className="w-5 h-5 rounded-full border border-slate-400 bg-white flex items-center justify-center mx-auto transition-all cursor-pointer hover:border-[#0066cc] hover:scale-110 active:scale-95 shadow-sm"
+                                            title={`Chọn "${col}" cho hàng "${row}"`}
+                                          >
+                                            <div 
+                                              className={`w-3 h-3 rounded-full transition-all ${
+                                                isCorrect ? 'bg-[#0066cc] scale-100' : 'bg-transparent scale-0'
+                                              }`} 
+                                            />
+                                          </button>
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
-                      ))}
+                      ) : (
+                        <div className="p-6 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-xl bg-slate-50">
+                          Vui lòng nhập đầy đủ các Hàng và Cột để hiển thị ma trận thiết lập.
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

@@ -1105,13 +1105,21 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                 {/* 11. MATRIX SELECTION */}
                 {currentQ.QuestionType === 'Matrix Selection' && parsedAnswers.matrixRows && parsedAnswers.matrixCols && (
                   <div className="space-y-4">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border border-slate-200 rounded-xl overflow-hidden text-[11px]">
+                    <p className="text-xs text-blue-600 font-bold bg-blue-50 p-2.5 rounded-lg mb-1">
+                      💡 Chọn đúng một phương án cho từng dòng phát biểu dưới đây:
+                    </p>
+                    <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-sm bg-white">
+                      <table className="w-full text-left border-collapse">
                         <thead>
-                          <tr className="bg-slate-100 border-b border-slate-200">
-                            <th className="p-3 font-bold text-slate-500">Đối tượng</th>
+                          <tr>
+                            <th className="p-3.5 border-b border-r border-slate-200 bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              Danh sách phát biểu / Câu hỏi phụ
+                            </th>
                             {parsedAnswers.matrixCols.map((col, cIdx) => (
-                              <th key={cIdx} className="p-3 text-center font-bold text-slate-500 max-w-[120px] leading-tight">
+                              <th 
+                                key={cIdx} 
+                                className="p-3.5 text-center font-bold text-white bg-[#0066cc] border-b border-l border-slate-200 text-xs min-w-[100px] leading-tight select-none"
+                              >
                                 {col}
                               </th>
                             ))}
@@ -1122,13 +1130,15 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                             const selectedCol = (currentAnswer || {})[rowVal];
 
                             return (
-                              <tr key={rowVal} className="hover:bg-slate-50/50">
-                                <td className="p-3 font-extrabold text-slate-700">{rowVal}</td>
+                              <tr key={rowVal} className="hover:bg-slate-50/50 transition">
+                                <td className="p-3.5 border-r border-slate-200 text-xs font-semibold text-slate-700 leading-relaxed max-w-[320px] break-words">
+                                  {rowVal}
+                                </td>
                                 {parsedAnswers.matrixCols?.map((colVal) => {
                                   const isChecked = selectedCol === colVal;
 
                                   return (
-                                    <td key={colVal} className="p-3 text-center">
+                                    <td key={colVal} className="p-3 border-l border-slate-200 text-center">
                                       <button
                                         type="button"
                                         onClick={() => {
@@ -1136,11 +1146,14 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                                           updated[rowVal] = colVal;
                                           handleSelectAnswer(currentQ.QuestionID, updated);
                                         }}
-                                        className={`w-5 h-5 rounded-full border mx-auto flex items-center justify-center transition cursor-pointer ${
-                                          isChecked ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-300 bg-white'
-                                        }`}
+                                        className="w-5 h-5 rounded-full border border-slate-400 bg-white flex items-center justify-center mx-auto transition-all cursor-pointer hover:border-[#0066cc] hover:scale-110 active:scale-95 shadow-sm"
+                                        title={`Chọn "${colVal}"`}
                                       >
-                                        {isChecked && <Check className="w-3.5 h-3.5" />}
+                                        <div 
+                                          className={`w-3 h-3 rounded-full transition-all ${
+                                            isChecked ? 'bg-[#0066cc] scale-100' : 'bg-transparent scale-0'
+                                          }`} 
+                                        />
                                       </button>
                                     </td>
                                   );
