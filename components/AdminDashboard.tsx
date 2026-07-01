@@ -880,8 +880,17 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
       // Map index-to-index
       finalCorrectAnswerStr = JSON.stringify(imgs.map((_, i) => i));
     } else if (qType === 'Matrix Selection') {
-      finalAnswersObj = { matrixRows, matrixCols };
-      finalCorrectAnswerStr = JSON.stringify(matrixCorrect);
+      const cleanRows = matrixRows.map(r => r.trim()).filter(Boolean);
+      const cleanCols = matrixCols.map(c => c.trim()).filter(Boolean);
+      finalAnswersObj = { matrixRows: cleanRows, matrixCols: cleanCols };
+      
+      const cleanCorrect: Record<string, string> = {};
+      Object.entries(matrixCorrect).forEach(([rowKey, colVal]) => {
+        if (rowKey.trim() && colVal && colVal.trim()) {
+          cleanCorrect[rowKey.trim()] = colVal.trim();
+        }
+      });
+      finalCorrectAnswerStr = JSON.stringify(cleanCorrect);
     }
 
     const newQ: Question = {
@@ -2845,31 +2854,37 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
                               </tr>
                             </thead>
                             <tbody>
-                              {matrixRows.map((row) => {
+                              {matrixRows.map((row, rIdx) => {
                                 const selectedCol = matrixCorrect[row];
 
                                 return (
-                                  <tr key={row} className="hover:bg-slate-50/50 transition">
+                                  <tr key={`row-${rIdx}`} className="hover:bg-slate-50/50 transition">
                                     {/* Row title on the left */}
                                     <td className="p-3 border-b border-r border-slate-200 text-xs font-semibold text-slate-700 max-w-[280px] break-words">
-                                      {row}
+                                      {row || <span className="text-slate-400 italic font-normal">(Chưa nhập phát biểu)</span>}
                                     </td>
                                     {/* Options on the right */}
-                                    {matrixCols.map((col) => {
-                                      const isCorrect = selectedCol === col;
+                                    {matrixCols.map((col, cIdx) => {
+                                      const isCorrect = selectedCol === col && col !== '';
 
                                       return (
-                                        <td key={col} className="p-3 border-b border-l border-slate-200 text-center">
+                                        <td key={`col-${cIdx}`} className="p-3 border-b border-l border-slate-200 text-center">
                                           <button
                                             type="button"
+                                            disabled={!row || !col}
                                             onClick={() => {
+                                              if (!row || !col) return;
                                               setMatrixCorrect({
                                                 ...matrixCorrect,
                                                 [row]: col,
                                               });
                                             }}
-                                            className="w-5 h-5 rounded-full border border-slate-400 bg-white flex items-center justify-center mx-auto transition-all cursor-pointer hover:border-[#0066cc] hover:scale-110 active:scale-95 shadow-sm"
-                                            title={`Chọn "${col}" cho hàng "${row}"`}
+                                            className={`w-5 h-5 rounded-full border flex items-center justify-center mx-auto transition-all shadow-sm ${
+                                              !row || !col
+                                                ? 'border-slate-200 bg-slate-100 cursor-not-allowed opacity-50'
+                                                : 'border-slate-400 bg-white cursor-pointer hover:border-[#0066cc] hover:scale-110 active:scale-95'
+                                            }`}
+                                            title={row && col ? `Chọn "${col}" cho hàng "${row}"` : ''}
                                           >
                                             <div 
                                               className={`w-3 h-3 rounded-full transition-all ${
