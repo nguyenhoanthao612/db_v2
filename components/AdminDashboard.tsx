@@ -2591,54 +2591,97 @@ export default function AdminDashboard({ syncTrigger, onSyncComplete, onOpenSett
 
                 {/* 10. Match Image To Text */}
                 {qType === 'Match Image To Text' && (
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] text-slate-400 uppercase">Danh sách Ảnh gán với Text</span>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-slate-700">Cặp ghép bài học</span>
+                        <span className="text-[9px] text-slate-400 uppercase font-semibold">Mô tả Text (Trái) ➔ Ảnh minh họa (Phải)</span>
+                      </div>
                       <button
                         type="button"
                         onClick={() => setImgTextPairs([...imgTextPairs, { img: '', text: '' }])}
-                        className="px-2 py-1 bg-blue-500 text-white rounded text-[10px]"
+                        className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold transition shadow-sm cursor-pointer"
                       >
-                        Thêm cặp +
+                        Thêm cặp mới +
                       </button>
                     </div>
 
-                    <div className="space-y-2.5">
+                    <div className="space-y-3">
                       {imgTextPairs.map((pair, idx) => (
-                        <div key={idx} className="flex gap-2 items-center text-[10px]">
-                          <input
-                            type="text"
-                            required
-                            placeholder="URL ảnh minh họa..."
-                            value={pair.img}
-                            onChange={(e) => {
-                              const arr = [...imgTextPairs];
-                              arr[idx].img = e.target.value;
-                              setImgTextPairs(arr);
-                            }}
-                            className="flex-1 px-3 py-1.5 border border-slate-200 rounded-lg text-slate-700 bg-white"
-                          />
-                          <span className="text-slate-400">➔</span>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Mô tả text phù hợp..."
-                            value={pair.text}
-                            onChange={(e) => {
-                              const arr = [...imgTextPairs];
-                              arr[idx].text = e.target.value;
-                              setImgTextPairs(arr);
-                            }}
-                            className="flex-1 px-3 py-1.5 border border-slate-200 rounded-lg text-slate-700 bg-white"
-                          />
-                          {imgTextPairs.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => setImgTextPairs(imgTextPairs.filter((_, i) => i !== idx))}
-                              className="text-red-500"
-                            >
-                              Hủy
-                            </button>
+                        <div key={idx} className="p-3 bg-white border border-slate-200/80 rounded-xl space-y-2 shadow-sm relative hover:border-slate-300 transition">
+                          <div className="flex gap-2 items-center text-[10px]">
+                            {/* Left Side: Description Text */}
+                            <div className="flex-1 space-y-1">
+                              <label className="text-[9px] font-bold text-slate-400 uppercase">Mô tả Text (Trái)</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="Nhập mô tả văn bản phù hợp..."
+                                value={pair.text}
+                                onChange={(e) => {
+                                  const arr = [...imgTextPairs];
+                                  arr[idx].text = e.target.value;
+                                  setImgTextPairs(arr);
+                                }}
+                                className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-slate-700 bg-white text-xs font-medium focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20"
+                              />
+                            </div>
+
+                            <span className="text-slate-400 font-extrabold text-sm self-end pb-1.5">➔</span>
+
+                            {/* Right Side: Image URL */}
+                            <div className="flex-1 space-y-1">
+                              <label className="text-[9px] font-bold text-slate-400 uppercase">URL Hình ảnh minh họa (Phải)</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="Dán link ảnh (https://...)"
+                                value={pair.img}
+                                onChange={(e) => {
+                                  const arr = [...imgTextPairs];
+                                  arr[idx].img = e.target.value;
+                                  setImgTextPairs(arr);
+                                }}
+                                className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-slate-700 bg-white text-xs font-medium focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20"
+                              />
+                            </div>
+
+                            {imgTextPairs.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setImgTextPairs(imgTextPairs.filter((_, i) => i !== idx))}
+                                className="text-rose-500 hover:text-rose-700 font-bold self-end pb-1.5 ml-1 transition"
+                                title="Xóa cặp này"
+                              >
+                                Xóa
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Live Image Preview */}
+                          {pair.img && (
+                            <div className="mt-2 pt-2 border-t border-slate-100 flex items-center gap-3 bg-slate-50/50 px-2 py-1.5 rounded-lg">
+                              <span className="text-[9px] text-slate-400 font-bold uppercase">Xem trước hình ảnh:</span>
+                              <div className="relative w-14 h-14 border border-slate-200 rounded-lg overflow-hidden bg-white flex items-center justify-center shadow-sm">
+                                <img
+                                  src={pair.img}
+                                  alt={`Preview ${idx + 1}`}
+                                  className="max-w-full max-h-full object-contain"
+                                  onError={(e) => {
+                                    // custom error handle: if image is broken, we can display a warning
+                                    e.currentTarget.style.display = 'none';
+                                    const sibling = e.currentTarget.nextElementSibling as HTMLElement;
+                                    if (sibling) sibling.style.display = 'flex';
+                                  }}
+                                />
+                                <div className="hidden absolute inset-0 text-[8px] text-rose-500 font-bold items-center justify-center text-center p-1 bg-rose-50">
+                                  Lỗi tải ảnh
+                                </div>
+                              </div>
+                              <span className="text-[9px] text-emerald-600 font-medium truncate max-w-xs">
+                                ✓ Đã dán URL - vui lòng kiểm tra ảnh xem hiển thị đúng chưa
+                              </span>
+                            </div>
                           )}
                         </div>
                       ))}

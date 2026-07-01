@@ -84,6 +84,34 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
     fetchQuestions();
   }, [exam, level, syncTrigger]);
 
+  const [shuffledImageIndices, setShuffledImageIndices] = useState<number[]>([]);
+  const [selectedMatchImgIdx, setSelectedMatchImgIdx] = useState<number | null>(null);
+
+  // Monitor current index to generate shuffled images indices for Match Image To Text
+  useEffect(() => {
+    const q = questions[currentIdx];
+    if (q && q.QuestionType === 'Match Image To Text') {
+      try {
+        const parsed: QuestionAnswers = JSON.parse(q.Answers);
+        if (parsed.imageOptions) {
+          const indices = parsed.imageOptions.map((_, i) => i);
+          const shuffled = [...indices].sort(() => Math.random() - 0.5);
+          setTimeout(() => {
+            setSelectedMatchImgIdx(null);
+            setShuffledImageIndices(shuffled);
+          }, 0);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    } else {
+      setTimeout(() => {
+        setSelectedMatchImgIdx(null);
+        setShuffledImageIndices([]);
+      }, 0);
+    }
+  }, [currentIdx, questions]);
+
   // Start Timer
   useEffect(() => {
     if (!loading && !quizFinished && questions.length > 0) {
@@ -851,47 +879,228 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                 })()}
 
                 {/* 10. MATCH IMAGE TO TEXT */}
-                {currentQ.QuestionType === 'Match Image To Text' && parsedAnswers.imageOptions && parsedAnswers.textTargets && (
-                  <div className="space-y-4">
-                    <p className="text-xs text-blue-600 font-bold bg-blue-50 p-2.5 rounded-lg mb-3">
-                      💡 Chọn đúng mục mô tả văn bản phù hợp cho từng hình minh họa dưới đây:
-                    </p>
+                {currentQ.QuestionType === 'Match Image To Text' && parsedAnswers.imageOptions && parsedAnswers.textTargets && (() => {
+                  const currentAnswer = answersState[currentQ.QuestionID] || Array(parsedAnswers.imageOptions.length).fill(null);
+                  
+                  // Get images that are NOT assigned to any text
+                  // i.e., indices where currentAnswer[imgIdx] is null or undefined
+                  const unassignedImageIndices = shuffledImageIndices.filter(imgIdx => currentAnswer[imgIdx] === null || currentAnswer[imgIdx] === undefined);
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {parsedAnswers.imageOptions.map((imgUrl, idx) => {
-                        const selectedTextIdx = (currentAnswer || [])[idx];
+                  return (
+                    <div className="space-y-4">
+                      <div className="bg-indigo-50 border border-indigo-100 text-indigo-700 p-3.5 rounded-2xl text-xs font-bold leading-relaxed shadow-sm">
+                        💡 <strong>Hướng dẫn kéo thả:</strong>
+                        <ul className="list-disc pl-4 mt-1 space-y-1 font-medium text-indigo-600">
+                          <li><strong>Cách 1:</strong> Nhấp chuột và giữ kéo hình ảnh từ cột bên phải, thả vào ô trống bên cạnh mô tả tương ứng ở cột bên trái.</li>
+                          <li><strong>Cách 2 (Trên điện thoại):</strong> Nhấp vào hình ảnh ở cột bên phải để chọn (ảnh sẽ nhấp nháy xanh), sau đó chạm vào ô trống bên trái để ghép cặp.</li>
+                        </ul>
+                      </div>
 
-                        return (
-                          <div key={idx} className="bg-slate-50 border border-slate-100 rounded-xl p-4 flex flex-col items-center gap-3">
-                            <div className="w-20 h-20 rounded-lg overflow-hidden bg-white border border-slate-200/60 shadow-inner flex items-center justify-center">
-                              <img src={imgUrl} alt={`Visual target ${idx}`} className="w-full h-full object-cover" />
-                            </div>
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                        {/* LEFT COLUMN: DESCRIPTION SLOTS */}
+                        <div className="md:col-span-7 space-y-3">
+                          <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Cột Trái: Mô tả văn bản</h4>
+                          
+                          {parsedAnswers.textTargets.map((tgt, tIdx) => {
+                            // Find if any image is matched with this text index (tIdx)
+                            const matchedImgIdx = currentAnswer.findIndex((val: any) => val === tIdx);
+                            const hasMatch = matchedImgIdx !== -1;
 
-                            <div className="w-full space-y-1">
-                              <label className="text-[10px] font-black uppercase text-slate-400">Gán với mô tả:</label>
-                              <select
-                                value={selectedTextIdx === null ? '' : selectedTextIdx}
-                                onChange={(e) => {
-                                  const arr = [...(currentAnswer || [])];
-                                  arr[idx] = e.target.value === '' ? null : Number(e.target.value);
-                                  handleSelectAnswer(currentQ.QuestionID, arr);
-                                }}
-                                className="w-full text-xs p-2 rounded-lg border border-slate-200 focus:outline-none bg-white font-bold text-slate-600"
+                            return (
+                              <div 
+                                key={tIdx} 
+                                className="flex items-center gap-3 bg-white border border-slate-200/80 rounded-2xl p-3 min-h-[90px] shadow-sm hover:shadow transition"
                               >
-                                <option value="">-- Chọn mô tả --</option>
-                                {parsedAnswers.textTargets?.map((tgt, tIdx) => (
-                                  <option key={tIdx} value={tIdx}>
-                                    {tgt.slice(0, 45)}...
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                                {/* Text description card */}
+                                <div className="flex-1 flex gap-2 items-start">
+                                  <span className="flex items-center justify-center w-5 h-5 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black mt-0.5 flex-shrink-0">
+                                    {tIdx + 1}
+                                  </span>
+                                  <p className="text-xs font-bold text-slate-700 leading-relaxed">
+                                    {tgt}
+                                  </p>
+                                </div>
+
+                                <div className="text-slate-300 font-extrabold text-sm select-none">➔</div>
+
+                                {/* Drop / Match Slot */}
+                                <div
+                                  className={`relative w-28 h-20 border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-1 transition-all flex-shrink-0 ${
+                                    hasMatch 
+                                      ? 'border-indigo-200 bg-indigo-50/20' 
+                                      : selectedMatchImgIdx !== null
+                                        ? 'border-indigo-400 bg-indigo-50 animate-pulse cursor-pointer'
+                                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'
+                                  }`}
+                                  onDragOver={(e) => e.preventDefault()}
+                                  onDragEnter={(e) => {
+                                    e.preventDefault();
+                                    e.currentTarget.classList.add('border-indigo-500', 'bg-indigo-50');
+                                  }}
+                                  onDragLeave={(e) => {
+                                    e.preventDefault();
+                                    e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
+                                  }}
+                                  onDrop={(e) => {
+                                    e.preventDefault();
+                                    e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
+                                    const imgIdxStr = e.dataTransfer.getData("text/plain");
+                                    if (imgIdxStr !== "") {
+                                      const imgIdx = parseInt(imgIdxStr, 10);
+                                      const arr = [...currentAnswer];
+                                      // Clear other assignments to this text slot (1-to-1)
+                                      arr.forEach((val, i) => {
+                                        if (val === tIdx) {
+                                          arr[i] = null;
+                                        }
+                                      });
+                                      arr[imgIdx] = tIdx;
+                                      handleSelectAnswer(currentQ.QuestionID, arr);
+                                      setSelectedMatchImgIdx(null);
+                                    }
+                                  }}
+                                  onClick={() => {
+                                    if (selectedMatchImgIdx !== null) {
+                                      const arr = [...currentAnswer];
+                                      arr.forEach((val, i) => {
+                                        if (val === tIdx) {
+                                          arr[i] = null;
+                                        }
+                                      });
+                                      arr[selectedMatchImgIdx] = tIdx;
+                                      handleSelectAnswer(currentQ.QuestionID, arr);
+                                      setSelectedMatchImgIdx(null);
+                                    }
+                                  }}
+                                >
+                                  {hasMatch ? (
+                                    <div className="relative w-full h-full group">
+                                      <img 
+                                        src={parsedAnswers.imageOptions?.[matchedImgIdx]} 
+                                        alt={`Matched visual ${matchedImgIdx}`} 
+                                        className="w-full h-full object-contain rounded-lg pointer-events-none"
+                                      />
+                                      {/* Remove Assignment button */}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const arr = [...currentAnswer];
+                                          arr[matchedImgIdx] = null;
+                                          handleSelectAnswer(currentQ.QuestionID, arr);
+                                        }}
+                                        className="absolute -top-2 -right-2 bg-rose-500 hover:bg-rose-600 text-white p-0.5 rounded-full shadow transition-transform hover:scale-110 cursor-pointer"
+                                        title="Hủy ghép cặp"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                      <div className="absolute bottom-0.5 left-0.5 bg-slate-900/70 text-[8px] text-white px-1 py-0.5 rounded font-black">
+                                        Ảnh {matchedImgIdx + 1}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="text-center pointer-events-none select-none p-1">
+                                      <span className="text-[10px] font-extrabold text-slate-400 block leading-tight">
+                                        {selectedMatchImgIdx !== null ? 'Chạm để thả' : 'Thả ảnh ở đây'}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* RIGHT COLUMN: IMAGES POOL */}
+                        <div className="md:col-span-5 bg-slate-50 border border-slate-200/60 rounded-2xl p-4 min-h-[300px]">
+                          <div className="flex justify-between items-center mb-3">
+                            <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider">Cột Phải: Hình ảnh minh họa</h4>
+                            <span className="text-[10px] font-extrabold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
+                              Còn {unassignedImageIndices.length} ảnh
+                            </span>
                           </div>
-                        );
-                      })}
+
+                          {unassignedImageIndices.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-3">
+                              {unassignedImageIndices.map((imgIdx) => {
+                                const isSelected = selectedMatchImgIdx === imgIdx;
+                                const imgUrl = parsedAnswers.imageOptions?.[imgIdx];
+
+                                return (
+                                  <div
+                                    key={imgIdx}
+                                    draggable="true"
+                                    onDragStart={(e) => {
+                                      e.dataTransfer.setData("text/plain", imgIdx.toString());
+                                      setSelectedMatchImgIdx(imgIdx);
+                                    }}
+                                    onDragEnd={() => setSelectedMatchImgIdx(null)}
+                                    onClick={() => {
+                                      if (selectedMatchImgIdx === imgIdx) {
+                                        setSelectedMatchImgIdx(null);
+                                      } else {
+                                        setSelectedMatchImgIdx(imgIdx);
+                                      }
+                                    }}
+                                    className={`relative aspect-square border-2 rounded-xl overflow-hidden bg-white cursor-grab active:cursor-grabbing p-1.5 shadow-sm transition-all select-none hover:shadow-md ${
+                                      isSelected
+                                        ? 'border-indigo-500 ring-4 ring-indigo-500/20 scale-105 shadow-md'
+                                        : 'border-slate-200 hover:border-slate-300'
+                                    }`}
+                                    title="Nhấp để chọn hoặc kéo thả sang trái"
+                                  >
+                                    <img 
+                                      src={imgUrl} 
+                                      alt={`Option visual ${imgIdx}`} 
+                                      className="w-full h-full object-contain rounded-lg pointer-events-none" 
+                                    />
+                                    
+                                    <div className="absolute bottom-1 right-1 bg-slate-900/60 text-[8px] text-white px-1 rounded font-black">
+                                      Ảnh {imgIdx + 1}
+                                    </div>
+
+                                    {isSelected && (
+                                      <div className="absolute inset-0 bg-indigo-500/10 flex items-center justify-center">
+                                        <div className="bg-indigo-600 text-white text-[9px] font-black px-2 py-1 rounded-full shadow-sm animate-bounce">
+                                          Đang chọn
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center py-12 text-center">
+                              <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-3 shadow-inner">
+                                <Check className="w-6 h-6" />
+                              </div>
+                              <span className="text-xs font-bold text-slate-700 block">Ghép cặp hoàn tất!</span>
+                              <span className="text-[10px] text-slate-400 mt-0.5">Bạn có thể hủy các cặp đã ghép ở cột trái để chọn lại.</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Reset Match option */}
+                      {currentAnswer.some((val: any) => val !== null) && (
+                        <div className="flex justify-end pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cleared = Array(parsedAnswers.imageOptions?.length || 0).fill(null);
+                              handleSelectAnswer(currentQ.QuestionID, cleared);
+                              setSelectedMatchImgIdx(null);
+                            }}
+                            className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-500 border border-slate-200 hover:border-rose-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" /> Xóa tất cả các cặp
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* 11. MATRIX SELECTION */}
                 {currentQ.QuestionType === 'Matrix Selection' && parsedAnswers.matrixRows && parsedAnswers.matrixCols && (
