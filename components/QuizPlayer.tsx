@@ -441,6 +441,10 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     }
 
     // Go to next question or finish quiz
+    if (mode === 'training') {
+      // In training mode, don't auto-advance. Users switch questions via the progress board manually.
+      return;
+    }
     if (currentIdx < questions.length - 1) {
       setCurrentIdx((prev) => prev + 1);
     } else {
@@ -1512,7 +1516,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
             {/* Pagination controls */}
             <div className="flex justify-between items-center gap-4">
-              {(mode === 'testing' || mode === 'training') ? (
+              {mode === 'testing' ? (
                 <>
                   <button
                     disabled={currentIdx === 0}
@@ -1522,20 +1526,6 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                     <ArrowLeft className="w-4 h-4" /> Câu trước
                   </button>
 
-                  {mode === 'training' && (
-                    <button
-                      disabled={!isCurrentAnswered}
-                      onClick={handleSubmitQuestion}
-                      className={`px-6 py-2.5 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md transition-all select-none ${
-                        !isCurrentAnswered
-                          ? 'bg-slate-300 shadow-none cursor-not-allowed'
-                          : 'bg-blue-500 hover:bg-blue-600 shadow-blue-100 cursor-pointer'
-                      }`}
-                    >
-                      <Check className="w-4 h-4" /> Nộp câu trả lời
-                    </button>
-                  )}
-
                   {currentIdx < questions.length - 1 ? (
                     <button
                       onClick={handleNext}
@@ -1544,28 +1534,35 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                       Câu tiếp theo <ArrowRight className="w-4 h-4" />
                     </button>
                   ) : (
-                    mode === 'testing' ? (
-                      <button
-                        disabled={hasUnanswered}
-                        onClick={handleFinish}
-                        className={`px-6 py-2.5 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md transition-all select-none ${
-                          hasUnanswered
-                            ? 'bg-slate-300 shadow-none cursor-not-allowed'
-                            : 'bg-green-500 hover:bg-green-600 shadow-green-100 cursor-pointer'
-                        }`}
-                        title={hasUnanswered ? 'Vui lòng chọn đáp án cho tất cả câu hỏi trước khi nộp' : 'Nộp bài thi'}
-                      >
-                        <Save className="w-4 h-4" /> Nộp bài thi
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleFinish}
-                        className="px-6 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md shadow-green-100 cursor-pointer select-none"
-                      >
-                        <Save className="w-4 h-4" /> Hoàn thành bài học
-                      </button>
-                    )
+                    <button
+                      disabled={hasUnanswered}
+                      onClick={handleFinish}
+                      className={`px-6 py-2.5 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md transition-all select-none ${
+                        hasUnanswered
+                          ? 'bg-slate-300 shadow-none cursor-not-allowed'
+                          : 'bg-green-500 hover:bg-green-600 shadow-green-100 cursor-pointer'
+                      }`}
+                      title={hasUnanswered ? 'Vui lòng chọn đáp án cho tất cả câu hỏi trước khi nộp' : 'Nộp bài thi'}
+                    >
+                      <Save className="w-4 h-4" /> Nộp bài thi
+                    </button>
                   )}
+                </>
+              ) : mode === 'training' ? (
+                <>
+                  {/* Empty spacer so the Nộp câu trả lời button resides on the right side (where Next button used to be) */}
+                  <div />
+                  <button
+                    disabled={!isCurrentAnswered}
+                    onClick={handleSubmitQuestion}
+                    className={`px-6 py-2.5 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md transition-all select-none ${
+                      !isCurrentAnswered
+                        ? 'bg-slate-300 shadow-none cursor-not-allowed'
+                        : 'bg-blue-500 hover:bg-blue-600 shadow-blue-100 cursor-pointer'
+                    }`}
+                  >
+                    <Check className="w-4 h-4" /> Nộp câu trả lời
+                  </button>
                 </>
               ) : (
                 /* Race mode */
@@ -1666,7 +1663,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
               </div>
             </div>
 
-            {mode === 'testing' && (
+            {(mode === 'testing' || mode === 'training') && (
               <button
                 disabled={hasUnanswered}
                 onClick={handleFinish}
@@ -1675,9 +1672,20 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                     ? 'bg-slate-300 shadow-none cursor-not-allowed'
                     : 'bg-green-500 hover:bg-green-600 shadow-green-100 cursor-pointer'
                 }`}
-                title={hasUnanswered ? 'Vui lòng chọn đáp án cho tất cả câu hỏi trước khi nộp' : 'Nộp bài ngay'}
+                title={
+                  hasUnanswered 
+                    ? 'Vui lòng chọn đáp án cho tất cả câu hỏi trước khi hoàn tất' 
+                    : mode === 'testing' 
+                    ? 'Nộp bài ngay' 
+                    : 'Hoàn thành bài học'
+                }
               >
-                {hasUnanswered ? 'Chưa hoàn thành tất cả' : 'Nộp bài ngay'}
+                {hasUnanswered 
+                  ? 'Chưa hoàn thành tất cả' 
+                  : mode === 'testing' 
+                  ? 'Nộp bài ngay' 
+                  : 'Hoàn thành bài học'
+                }
               </button>
             )}
           </div>
@@ -1914,7 +1922,14 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                     : 'bg-blue-500 hover:bg-blue-600 shadow-blue-100'
                 }`}
               >
-                {mode === 'race' && !feedbackIsCorrect ? 'Làm lại từ đầu' : currentIdx < questions.length - 1 ? 'Câu tiếp theo' : 'Nộp bài và hoàn tất'}
+                {mode === 'race' && !feedbackIsCorrect 
+                  ? 'Làm lại từ đầu' 
+                  : mode === 'training' 
+                  ? 'Xác nhận' 
+                  : currentIdx < questions.length - 1 
+                  ? 'Câu tiếp theo' 
+                  : 'Nộp bài và hoàn tất'
+                }
               </button>
             </div>
           </div>
