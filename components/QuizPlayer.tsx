@@ -28,6 +28,54 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackIsCorrect, setFeedbackIsCorrect] = useState(false);
+
+  // Draggable feedback modal state
+  const [feedbackModalPos, setFeedbackModalPos] = useState({ x: 0, y: 0 });
+  const [isDraggingModal, setIsDraggingModal] = useState(false);
+  const dragModalStart = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (showFeedbackModal) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFeedbackModalPos({ x: 0, y: 0 });
+    }
+  }, [showFeedbackModal]);
+
+  const handleModalDragStart = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    setIsDraggingModal(true);
+    dragModalStart.current = {
+      x: e.clientX - feedbackModalPos.x,
+      y: e.clientY - feedbackModalPos.y,
+    };
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingModal) return;
+      const newX = e.clientX - dragModalStart.current.x;
+      const newY = e.clientY - dragModalStart.current.y;
+      setFeedbackModalPos({ x: newX, y: newY });
+    };
+
+    const handleMouseUp = () => {
+      if (isDraggingModal) {
+        setIsDraggingModal(false);
+      }
+    };
+
+    if (isDraggingModal) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingModal]);
+
   const [draggingDot, setDraggingDot] = useState<{
     qId: string;
     index: number;
@@ -442,7 +490,9 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
     // Go to next question or finish quiz
     if (mode === 'training') {
-      // In training mode, don't auto-advance. Users switch questions via the progress board manually.
+      if (currentIdx < questions.length - 1) {
+        setCurrentIdx((prev) => prev + 1);
+      }
       return;
     }
     if (currentIdx < questions.length - 1) {
@@ -1873,7 +1923,19 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
       {/* FEEDBACK MODAL FOR TRAINING & RACE MODE */}
       {showFeedbackModal && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden border border-slate-100 shadow-2xl relative animate-scale-up">
+          <div 
+            style={{ transform: `translate(${feedbackModalPos.x}px, ${feedbackModalPos.y}px)` }}
+            className="bg-white rounded-3xl w-full max-w-lg overflow-hidden border border-slate-100 shadow-2xl relative animate-scale-up"
+          >
+            {/* Drag Handle Bar */}
+            <div 
+              onMouseDown={handleModalDragStart}
+              className="h-8 bg-slate-50 hover:bg-slate-100 border-b border-slate-100 flex items-center justify-center cursor-move select-none group px-4 transition-colors"
+              title="Nhấp và kéo để di chuyển bảng kết quả"
+            >
+              <div className="w-12 h-1 bg-slate-300 rounded-full group-hover:bg-slate-400 transition" />
+            </div>
+
             <div className="p-6 sm:p-8 text-center space-y-6">
               {/* Animated visual state */}
               <div className="flex justify-center">
