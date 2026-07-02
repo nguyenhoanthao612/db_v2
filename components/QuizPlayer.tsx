@@ -43,6 +43,10 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
   const handleModalDragStart = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('a') || target.closest('.overflow-y-auto')) {
+      return;
+    }
     setIsDraggingModal(true);
     dragModalStart.current = {
       x: e.clientX - feedbackModalPos.x,
@@ -1922,15 +1926,17 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
       {/* FEEDBACK MODAL FOR TRAINING & RACE MODE */}
       {showFeedbackModal && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/10 z-50 flex items-center justify-center p-4">
           <div 
             style={{ transform: `translate(${feedbackModalPos.x}px, ${feedbackModalPos.y}px)` }}
-            className="bg-white rounded-3xl w-full max-w-lg overflow-hidden border border-slate-100 shadow-2xl relative animate-scale-up"
+            onMouseDown={handleModalDragStart}
+            className={`bg-white rounded-3xl w-full max-w-lg overflow-hidden border border-slate-200 shadow-2xl relative animate-scale-up select-none ${
+              isDraggingModal ? 'cursor-grabbing' : 'cursor-grab'
+            }`}
           >
             {/* Drag Handle Bar */}
             <div 
-              onMouseDown={handleModalDragStart}
-              className="h-8 bg-slate-50 hover:bg-slate-100 border-b border-slate-100 flex items-center justify-center cursor-move select-none group px-4 transition-colors"
+              className="h-8 bg-slate-50 hover:bg-slate-100 border-b border-slate-100 flex items-center justify-center select-none group px-4 transition-colors"
               title="Nhấp và kéo để di chuyển bảng kết quả"
             >
               <div className="w-12 h-1 bg-slate-300 rounded-full group-hover:bg-slate-400 transition" />
