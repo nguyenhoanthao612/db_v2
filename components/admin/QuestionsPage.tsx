@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { DatabaseService } from '@/lib/database-service';
 import { Question, IC3QuestionType, QuestionAnswers } from '@/lib/types';
 import { useAdmin } from '@/components/admin/AdminContext';
@@ -90,10 +90,15 @@ export default function QuestionsPage() {
     left: number;
     top: number;
   } | null>(null);
-  const adminImgRef = useRef<HTMLImageElement | null>(null);
+  const [adminImgElement, setAdminImgElement] = useState<HTMLImageElement | null>(null);
 
-  const updateAdminImageRect = () => {
-    const img = adminImgRef.current;
+  const adminImgRefCallback = useCallback((node: HTMLImageElement | null) => {
+    if (node !== null) {
+      setAdminImgElement(node);
+    }
+  }, []);
+
+  const updateAdminImageRect = useCallback((img: HTMLImageElement | null) => {
     if (!img) return;
 
     const rect = img.getBoundingClientRect();
@@ -129,25 +134,31 @@ export default function QuestionsPage() {
       left: offsetX,
       top: offsetY,
     });
-  };
+  }, []);
 
   useEffect(() => {
-    const img = adminImgRef.current;
-    if (!img) return;
+    if (!adminImgElement) return;
 
     const observer = new ResizeObserver(() => {
-      updateAdminImageRect();
+      updateAdminImageRect(adminImgElement);
     });
-    observer.observe(img);
+    observer.observe(adminImgElement);
 
-    img.addEventListener('load', updateAdminImageRect);
-    updateAdminImageRect();
+    const handleLoad = () => {
+      updateAdminImageRect(adminImgElement);
+    };
+
+    adminImgElement.addEventListener('load', handleLoad);
+    const timerId = setTimeout(() => {
+      updateAdminImageRect(adminImgElement);
+    }, 0);
 
     return () => {
       observer.disconnect();
-      img.removeEventListener('load', updateAdminImageRect);
+      adminImgElement.removeEventListener('load', handleLoad);
+      clearTimeout(timerId);
     };
-  }, [qImageUrl, showQModal]);
+  }, [adminImgElement, qImageUrl, showQModal, updateAdminImageRect]);
 
   // For Match Image to Text
   const [imgTextPairs, setImgTextPairs] = useState<{ img: string; text: string }[]>([{ img: '', text: '' }]);
@@ -1323,7 +1334,7 @@ export default function QuestionsPage() {
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            ref={adminImgRef}
+                            ref={adminImgRefCallback}
                             src={qImageUrl}
                             alt="Interactive hotspot builder"
                             className="w-full h-full object-contain pointer-events-none"

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Exam, Question, ScoreRecord, QuestionAnswers } from '@/lib/types';
 import { DatabaseService } from '@/lib/database-service';
 import { Check, X, Clock, Award, AlertCircle, ArrowLeft, ArrowRight, Save, Play, RefreshCw, Volume2, HelpCircle, Flag } from 'lucide-react';
@@ -98,10 +98,16 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     left: number;
     top: number;
   } | null>(null);
-  const quizImgRef = useRef<HTMLImageElement | null>(null);
 
-  const updateQuizImageRect = () => {
-    const img = quizImgRef.current;
+  const [quizImgElement, setQuizImgElement] = useState<HTMLImageElement | null>(null);
+
+  const quizImgRefCallback = useCallback((node: HTMLImageElement | null) => {
+    if (node !== null) {
+      setQuizImgElement(node);
+    }
+  }, []);
+
+  const updateQuizImageRect = useCallback((img: HTMLImageElement | null) => {
     if (!img) return;
 
     const rect = img.getBoundingClientRect();
@@ -137,25 +143,31 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
       left: offsetX,
       top: offsetY,
     });
-  };
+  }, []);
 
   useEffect(() => {
-    const img = quizImgRef.current;
-    if (!img) return;
+    if (!quizImgElement) return;
 
     const observer = new ResizeObserver(() => {
-      updateQuizImageRect();
+      updateQuizImageRect(quizImgElement);
     });
-    observer.observe(img);
+    observer.observe(quizImgElement);
 
-    img.addEventListener('load', updateQuizImageRect);
-    updateQuizImageRect();
+    const handleLoad = () => {
+      updateQuizImageRect(quizImgElement);
+    };
+
+    quizImgElement.addEventListener('load', handleLoad);
+    const timerId = setTimeout(() => {
+      updateQuizImageRect(quizImgElement);
+    }, 0);
 
     return () => {
       observer.disconnect();
-      img.removeEventListener('load', updateQuizImageRect);
+      quizImgElement.removeEventListener('load', handleLoad);
+      clearTimeout(timerId);
     };
-  }, [questions[currentIdx]?.Image, currentIdx]);
+  }, [quizImgElement, questions[currentIdx]?.Image, currentIdx, updateQuizImageRect]);
 
   // Load questions
   useEffect(() => {
@@ -401,7 +413,19 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
       if (q.QuestionType === 'Hotspot') {
         try {
           const parsed: QuestionAnswers = JSON.parse(q.Answers);
-          const hotspots = parsed.hotspots || [];
+          const rawHotspots = parsed.hotspots || [];
+          const hotspots = rawHotspots.map((h: any) => {
+            const hasRadius = h.radius !== undefined;
+            const w = h.width ?? h.w ?? 15;
+            const h_val = h.height ?? h.h ?? 15;
+            const radius = h.radius ?? Math.max(1, Math.round(w / 2));
+            return {
+              ...h,
+              x: hasRadius ? h.x : h.x + w / 2,
+              y: hasRadius ? h.y : h.y + h_val / 2,
+              radius: radius,
+            };
+          });
           if (!Array.isArray(studentAnswer)) {
             return String(studentAnswer) === String(correctAnsStr);
           }
@@ -414,8 +438,9 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
             for (let i = 0; i < dots.length; i++) {
               if (!usedDots.has(i)) {
                 const dot = dots[i];
-                const inside = dot.x >= spot.x && dot.x <= (spot.x + (spot.width || spot.w || 0)) &&
-                               dot.y >= spot.y && dot.y <= (spot.y + (spot.height || spot.h || 0));
+                const radius = spot.radius || 15;
+                const dist = Math.sqrt(Math.pow(dot.x - spot.x, 2) + Math.pow(dot.y - spot.y, 2));
+                const inside = dist <= radius;
                 if (inside) {
                   usedDots.add(i);
                   if (match(hotspotIdx + 1, usedDots)) {
@@ -1483,7 +1508,19 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
                 {/* 9. HOTSPOT (Click Image Target Coordinate) */}
                 {currentQ.QuestionType === 'Hotspot' && parsedAnswers.hotspots && currentQ.Image && (() => {
-                  const hotspotsList = parsedAnswers.hotspots || [];
+                                  const rawHotspots = parsedAnswers.hotspots || [];
+                  const hotspotsList = rawHotspots.map((h: any) => {
+                    const hasRadius = h.radius !== undefined;
+                    const w = h.width ?? h.w ?? 15;
+                    const h_val = h.height ?? h.h ?? 15;
+                    const radius = h.radius ?? Math.max(1, Math.round(w / 2));
+                    return {
+                      ...h,
+                      x: hasRadius ? h.x : h.x + w / 2,
+                      y: hasRadius ? h.y : h.y + h_val / 2,
+                      radius: radius,
+                    };
+                  });
                   const targetCount = hotspotsList.length;
                   const dots = Array.isArray(currentAnswer) ? currentAnswer : [];
 
@@ -1504,7 +1541,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                         }`}
                       >
                         <img 
-                          ref={quizImgRef}
+                          ref={quizImgRefCallback}
                           src={currentQ.Image} 
                           alt="Hotspot layout" 
                           className="w-full h-auto opacity-95 max-h-[450px] object-contain pointer-events-none" 
