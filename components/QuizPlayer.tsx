@@ -10,11 +10,12 @@ interface QuizPlayerProps {
   exam: Exam;
   level: 'LV1' | 'LV2' | 'LV3';
   student: any;
+  mode: 'training' | 'testing' | 'race';
   onBack: () => void;
   syncTrigger: number;
 }
 
-export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }: QuizPlayerProps) {
+export default function QuizPlayer({ exam, level, student, mode, onBack, syncTrigger }: QuizPlayerProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -24,6 +25,8 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
   const [quizFinished, setQuizFinished] = useState(false);
   const [scoreRecord, setScoreRecord] = useState<ScoreRecord | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackIsCorrect, setFeedbackIsCorrect] = useState(false);
   const [draggingDot, setDraggingDot] = useState<{
     qId: string;
     index: number;
@@ -69,7 +72,7 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
             initialAnswers[q.QuestionID] = {}; // item -> category
           } else if (q.QuestionType === 'Hotspot') {
             initialAnswers[q.QuestionID] = []; // selected hotspots dots array
-          } else if (q.QuestionType === 'Match Image To Text') {
+          } else if (q.QuestionType?.toLowerCase() === 'match image to text') {
             initialAnswers[q.QuestionID] = Array(parsedAnswers.imageOptions?.length || 0).fill(null); // idx -> text index
           } else if (q.QuestionType === 'Matrix Selection') {
             initialAnswers[q.QuestionID] = {}; // row -> column
@@ -94,7 +97,7 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
   useEffect(() => {
     const q = questions[currentIdx];
     if (q) {
-      if (q.QuestionType === 'Match Image To Text') {
+      if (q.QuestionType?.toLowerCase() === 'match image to text') {
         try {
           const parsed: QuestionAnswers = JSON.parse(q.Answers);
           if (parsed.imageOptions) {
@@ -146,14 +149,35 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
   // Start Timer
   useEffect(() => {
     if (!loading && !quizFinished && questions.length > 0) {
+      if (mode === 'testing') {
+        // Initialize timer to exam duration in seconds if it's 0 or not initialized
+        setTimer((prev) => (prev === 0 ? (exam.Duration || 40) * 60 : prev));
+      } else {
+        setTimer(0);
+      }
+      
       timerRef.current = setInterval(() => {
-        setTimer((prev) => prev + 1);
+        setTimer((prev) => {
+          if (mode === 'testing') {
+            if (prev <= 1) {
+              clearInterval(timerRef.current!);
+              // Auto-finish on next tick or immediately
+              setTimeout(() => {
+                handleFinish();
+              }, 0);
+              return 0;
+            }
+            return prev - 1;
+          } else {
+            return prev + 1;
+          }
+        });
       }, 1000);
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [loading, quizFinished, questions]);
+  }, [loading, quizFinished, questions, mode]);
 
   const handleSelectAnswer = (qId: string, answer: any) => {
     setAnswersState((prev) => ({
@@ -264,7 +288,7 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
         }
       }
 
-      if (q.QuestionType === 'Match Image To Text') {
+      if (q.QuestionType?.toLowerCase() === 'match image to text') {
         const correctOrder: number[] = JSON.parse(correctAnsStr);
         const studentOrder: number[] = studentAnswer;
         if (correctOrder.length !== studentOrder.length) return false;
@@ -301,6 +325,9 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
     });
 
     const scorePct = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
+    const elapsedSeconds = mode === 'testing'
+      ? Math.max(0, ((exam.Duration || 40) * 60) - timer)
+      : timer;
 
     const record: ScoreRecord = {
       StudentID: student.StudentID,
@@ -310,7 +337,7 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
       Score: scorePct,
       Correct: correctCount,
       Wrong: wrongCount,
-      Time: timer,
+      Time: elapsedSeconds,
       SubmitTime: new Date().toISOString(),
     };
 
@@ -319,6 +346,75 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
 
     // Save to server
     await DatabaseService.submitScore(record);
+  };
+
+  const handleSubmitQuestion = async () => {
+    const q = questions[currentIdx];
+    const ans = answersState[q.QuestionID];
+    const isCorrect = gradeQuestion(q, ans);
+    
+    setFeedbackIsCorrect(isCorrect);
+    setShowFeedbackModal(true);
+
+    if (mode === 'race' && !isCorrect) {
+      // Save current progress to history before resetting
+      const scorePct = questions.length > 0 ? Math.round((currentIdx / questions.length) * 100) : 0;
+      const record: ScoreRecord = {
+        StudentID: student.StudentID,
+        StudentName: student.FullName,
+        ExamID: exam.ExamID,
+        Level: level,
+        Score: scorePct,
+        Correct: currentIdx, // everything before this was correct
+        Wrong: questions.length - currentIdx,
+        Time: timer,
+        SubmitTime: new Date().toISOString(),
+      };
+      await DatabaseService.submitScore(record);
+    }
+  };
+
+  const handleFeedbackNext = () => {
+    setShowFeedbackModal(false);
+    
+    if (mode === 'race' && !feedbackIsCorrect) {
+      // Reset quiz for Race mode
+      setCurrentIdx(0);
+      setTimer(0);
+      // Reset answers
+      const initialAnswers: Record<string, any> = {};
+      questions.forEach((q) => {
+        const parsedAnswers: QuestionAnswers = JSON.parse(q.Answers);
+        if (q.QuestionType === 'Multiple Choice' || q.QuestionType === 'True / False' || q.QuestionType === 'Video Based') {
+          initialAnswers[q.QuestionID] = null;
+        } else if (q.QuestionType === 'Multiple Response') {
+          initialAnswers[q.QuestionID] = [];
+        } else if (q.QuestionType === 'Matching') {
+          initialAnswers[q.QuestionID] = {};
+        } else if (q.QuestionType === 'Sequence Ordering') {
+          initialAnswers[q.QuestionID] = parsedAnswers.sequenceItems ? [...parsedAnswers.sequenceItems] : [];
+        } else if (q.QuestionType === 'True/False Multiple') {
+          initialAnswers[q.QuestionID] = {};
+        } else if (q.QuestionType === 'Categorization') {
+          initialAnswers[q.QuestionID] = {};
+        } else if (q.QuestionType === 'Hotspot') {
+          initialAnswers[q.QuestionID] = [];
+        } else if (q.QuestionType?.toLowerCase() === 'match image to text') {
+          initialAnswers[q.QuestionID] = Array(parsedAnswers.imageOptions?.length || 0).fill(null);
+        } else if (q.QuestionType === 'Matrix Selection') {
+          initialAnswers[q.QuestionID] = {};
+        }
+      });
+      setAnswersState(initialAnswers);
+      return;
+    }
+
+    // Go to next question or finish quiz
+    if (currentIdx < questions.length - 1) {
+      setCurrentIdx((prev) => prev + 1);
+    } else {
+      handleFinish();
+    }
   };
 
   const formatTimer = (totalSeconds: number) => {
@@ -360,12 +456,19 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
           <div className="lg:col-span-3 space-y-6">
             {/* Nav Header */}
             <div className="flex justify-between items-center bg-white border border-blue-100/60 p-4 rounded-2xl shadow-sm">
-              <button
-                onClick={onBack}
-                className="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-xs font-bold transition cursor-pointer"
-              >
-                <ArrowLeft className="w-4 h-4" /> Thoát làm bài
-              </button>
+              <div className="flex items-center gap-2">
+                <span className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-white rounded-lg ${
+                  mode === 'training' ? 'bg-blue-500' : mode === 'testing' ? 'bg-[#0066cc]' : 'bg-amber-500 animate-pulse'
+                }`}>
+                  {mode === 'training' ? 'Training' : mode === 'testing' ? 'Testing' : 'Race'}
+                </span>
+                <button
+                  onClick={onBack}
+                  className="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-xs font-bold transition cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" /> Thoát làm bài
+                </button>
+              </div>
 
               <div className="flex items-center gap-4">
                 <span className="text-xs font-bold text-slate-400">
@@ -413,7 +516,7 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
               </div>
 
               {/* Media assets */}
-              {currentQ.Image && currentQ.QuestionType !== 'Hotspot' && currentQ.QuestionType !== 'Match Image To Text' && (
+              {currentQ.Image && currentQ.QuestionType !== 'Hotspot' && currentQ.QuestionType?.toLowerCase() !== 'match image to text' && (
                 <div className="relative border border-slate-100 rounded-xl overflow-hidden max-w-lg mx-auto bg-slate-50">
                   <img
                     src={currentQ.Image}
@@ -1042,7 +1145,7 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                 })()}
 
                 {/* 10. MATCH IMAGE TO TEXT */}
-                {currentQ.QuestionType === 'Match Image To Text' && parsedAnswers.imageOptions && parsedAnswers.textTargets && (() => {
+                {currentQ.QuestionType?.toLowerCase() === 'match image to text' && parsedAnswers.imageOptions && parsedAnswers.textTargets && (() => {
                   const currentAnswer = answersState[currentQ.QuestionID] || Array(parsedAnswers.imageOptions.length).fill(null);
                   
                   // Get images that are NOT assigned to any text
@@ -1334,28 +1437,41 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
 
             {/* Pagination controls */}
             <div className="flex justify-between items-center">
-              <button
-                disabled={currentIdx === 0}
-                onClick={handlePrev}
-                className="px-4 py-2.5 bg-slate-100 border border-slate-200 disabled:opacity-40 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer select-none"
-              >
-                <ArrowLeft className="w-4 h-4" /> Câu trước
-              </button>
+              {mode === 'testing' ? (
+                <>
+                  <button
+                    disabled={currentIdx === 0}
+                    onClick={handlePrev}
+                    className="px-4 py-2.5 bg-slate-100 border border-slate-200 disabled:opacity-40 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer select-none"
+                  >
+                    <ArrowLeft className="w-4 h-4" /> Câu trước
+                  </button>
 
-              {currentIdx < questions.length - 1 ? (
-                <button
-                  onClick={handleNext}
-                  className="px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer select-none"
-                >
-                  Câu tiếp theo <ArrowRight className="w-4 h-4" />
-                </button>
+                  {currentIdx < questions.length - 1 ? (
+                    <button
+                      onClick={handleNext}
+                      className="px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer select-none"
+                    >
+                      Câu tiếp theo <ArrowRight className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleFinish}
+                      className="px-6 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md shadow-green-100 cursor-pointer select-none"
+                    >
+                      <Save className="w-4 h-4" /> Nộp bài thi
+                    </button>
+                  )}
+                </>
               ) : (
-                <button
-                  onClick={handleFinish}
-                  className="px-6 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md shadow-green-100 cursor-pointer select-none"
-                >
-                  <Save className="w-4 h-4" /> Nộp bài thi
-                </button>
+                <div className="w-full">
+                  <button
+                    onClick={handleSubmitQuestion}
+                    className="w-full py-3.5 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-blue-100 cursor-pointer select-none"
+                  >
+                    <Check className="w-4 h-4" /> Nộp câu trả lời
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -1375,7 +1491,7 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                 const isAnswered = (() => {
                   if (ans === null || ans === undefined) return false;
                   if (Array.isArray(ans)) {
-                    if (q.QuestionType === 'Match Image To Text') {
+                    if (q.QuestionType?.toLowerCase() === 'match image to text') {
                       return ans.some(v => v !== null && v !== undefined);
                     }
                     return ans.length > 0;
@@ -1390,8 +1506,15 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                 return (
                   <button
                     key={q.QuestionID}
-                    onClick={() => setCurrentIdx(idx)}
-                    className={`h-9 w-full rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 relative ${
+                    onClick={() => {
+                      if (mode === 'testing') {
+                        setCurrentIdx(idx);
+                      }
+                    }}
+                    disabled={mode !== 'testing'}
+                    className={`h-9 w-full rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1 relative ${
+                      mode === 'testing' ? 'cursor-pointer' : 'cursor-default'
+                    } ${
                       isSelected
                         ? 'bg-blue-500 text-white shadow-md shadow-blue-200'
                         : isAnswered
@@ -1433,12 +1556,14 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
               </div>
             </div>
 
-            <button
-              onClick={handleFinish}
-              className="w-full py-3 bg-green-500 hover:bg-green-600 text-white text-xs font-extrabold rounded-xl shadow-md shadow-green-100 transition cursor-pointer select-none"
-            >
-              Nộp bài ngay
-            </button>
+            {mode === 'testing' && (
+              <button
+                onClick={handleFinish}
+                className="w-full py-3 bg-green-500 hover:bg-green-600 text-white text-xs font-extrabold rounded-xl shadow-md shadow-green-100 transition cursor-pointer select-none"
+              >
+                Nộp bài ngay
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -1551,7 +1676,7 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                               Array.isArray(studentAns)
                                 ? `Đã đặt ${studentAns.length} vị trí chấm trên hình ảnh`
                                 : (answersParsed.hotspots?.find((s) => s.id === studentAns)?.name || studentAns)
-                            ) : q.QuestionType === 'Match Image To Text' ? (
+                            ) : q.QuestionType?.toLowerCase() === 'match image to text' ? (
                               (studentAns as number[])
                                 .map((tIdx, i) => `[Ảnh ${i + 1} ➔ ${tIdx !== null ? answersParsed.textTargets?.[tIdx] : 'Chưa gán'}]`)
                                 .join(', ')
@@ -1592,7 +1717,7 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                               answersParsed.hotspots
                                 ? `Yêu cầu xác định ${answersParsed.hotspots.length} vùng: [${answersParsed.hotspots.map((s: any) => s.name || s.id).join(', ')}]`
                                 : q.CorrectAnswer
-                            ) : q.QuestionType === 'Match Image To Text' ? (
+                            ) : q.QuestionType?.toLowerCase() === 'match image to text' ? (
                               JSON.parse(q.CorrectAnswer)
                                 .map((tIdx: number, i: number) => `[Ảnh ${i + 1} ➔ ${answersParsed.textTargets?.[tIdx]}]`)
                                 .join(', ')
@@ -1616,6 +1741,65 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FEEDBACK MODAL FOR TRAINING & RACE MODE */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden border border-slate-100 shadow-2xl relative animate-scale-up">
+            <div className="p-6 sm:p-8 text-center space-y-6">
+              {/* Animated visual state */}
+              <div className="flex justify-center">
+                {feedbackIsCorrect ? (
+                  <div className="w-20 h-20 rounded-full bg-green-50 flex items-center justify-center border-4 border-green-200 shadow-md">
+                    <Check className="w-10 h-10 text-green-500 stroke-[3]" />
+                  </div>
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-rose-50 flex items-center justify-center border-4 border-rose-200 shadow-md">
+                    <X className="w-10 h-10 text-rose-500 stroke-[3]" />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <h3 className={`text-xl font-black ${feedbackIsCorrect ? 'text-green-600' : 'text-rose-600'}`}>
+                  {feedbackIsCorrect ? 'Kết quả: Chính xác! 🎉' : 'Kết quả: Chưa chính xác! ❌'}
+                </h3>
+                {mode === 'race' && !feedbackIsCorrect && (
+                  <p className="text-xs text-rose-500 font-extrabold bg-rose-50 py-2.5 rounded-xl border border-rose-100 px-4">
+                    ⚠️ Chế độ Đua Tốc Độ yêu cầu bạn làm lại từ đầu! Thử thách đã dừng.
+                  </p>
+                )}
+              </div>
+
+              {/* Detailed Explanation */}
+              {currentQ.Explanation && (
+                <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 text-left max-h-[180px] overflow-y-auto">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-500 block mb-1">
+                    Giải thích chi tiết:
+                  </span>
+                  <p className="text-xs text-blue-900 leading-relaxed font-semibold">
+                    {currentQ.Explanation}
+                  </p>
+                </div>
+              )}
+
+              {/* Button Action */}
+              <button
+                onClick={handleFeedbackNext}
+                className={`w-full py-3.5 text-white text-xs font-black rounded-xl transition shadow-md cursor-pointer select-none ${
+                  feedbackIsCorrect
+                    ? 'bg-green-500 hover:bg-green-600 shadow-green-100'
+                    : mode === 'race'
+                    ? 'bg-rose-500 hover:bg-rose-600 shadow-rose-100'
+                    : 'bg-blue-500 hover:bg-blue-600 shadow-blue-100'
+                }`}
+              >
+                {mode === 'race' && !feedbackIsCorrect ? 'Làm lại từ đầu' : currentIdx < questions.length - 1 ? 'Câu tiếp theo' : 'Nộp bài và hoàn tất'}
+              </button>
             </div>
           </div>
         </div>

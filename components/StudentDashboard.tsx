@@ -3,12 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseService } from '@/lib/database-service';
 import { Exam, ScoreRecord } from '@/lib/types';
-import { BookOpen, Trophy, Award, Clock, ArrowRight, CheckCircle2, XCircle, ChevronRight, Activity, Calendar } from 'lucide-react';
+import { BookOpen, Trophy, Award, Clock, ArrowRight, CheckCircle2, XCircle, ChevronRight, Activity, Calendar, X, Zap } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface StudentDashboardProps {
   student: any;
-  onSelectExam: (exam: Exam, level: 'LV1' | 'LV2' | 'LV3') => void;
+  onSelectExam: (exam: Exam, level: 'LV1' | 'LV2' | 'LV3', mode: 'training' | 'testing' | 'race') => void;
   syncTrigger: number;
 }
 
@@ -17,6 +17,8 @@ export default function StudentDashboard({ student, onSelectExam, syncTrigger }:
   const [scores, setScores] = useState<ScoreRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLevel, setSelectedLevel] = useState<'LV1' | 'LV2' | 'LV3' | 'ALL'>('ALL');
+  const [selectedExamForMode, setSelectedExamForMode] = useState<Exam | null>(null);
+  const [activeModeSelection, setActiveModeSelection] = useState<'training' | 'testing' | 'race'>('training');
 
   useEffect(() => {
     async function loadData() {
@@ -225,7 +227,10 @@ export default function StudentDashboard({ student, onSelectExam, syncTrigger }:
                     </div>
 
                     <button
-                      onClick={() => onSelectExam(exam, exam.Level)}
+                      onClick={() => {
+                        setSelectedExamForMode(exam);
+                        setActiveModeSelection('training');
+                      }}
                       className="mt-5 w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1 transition shadow-sm hover:shadow-md cursor-pointer"
                     >
                       Bắt đầu làm bài <ChevronRight className="w-4 h-4" />
@@ -299,6 +304,128 @@ export default function StudentDashboard({ student, onSelectExam, syncTrigger }:
           </div>
         </div>
       </div>
+
+      {/* MODE SELECTION MODAL */}
+      {selectedExamForMode && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden border border-slate-100 shadow-2xl relative animate-scale-up">
+            <button
+              onClick={() => setSelectedExamForMode(null)}
+              className="absolute right-5 top-5 text-slate-400 hover:text-slate-600 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="p-6 sm:p-8 space-y-6">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-500 bg-blue-50 px-2.5 py-1 rounded-full">
+                  Cấu hình bài làm
+                </span>
+                <h3 className="text-xl font-black text-slate-800 mt-2.5">Chọn Chế Độ Luyện Thi</h3>
+                <p className="text-xs text-slate-400 font-semibold mt-1">
+                  Đề ôn tập: <span className="text-slate-700 font-extrabold">{selectedExamForMode.ExamID}</span> ({selectedExamForMode.Level}) • {selectedExamForMode.QuestionIDs.length} câu hỏi
+                </p>
+              </div>
+
+              {/* Mode Options Grid */}
+              <div className="space-y-3.5">
+                {/* 1. TRAINING MODE */}
+                <button
+                  type="button"
+                  onClick={() => setActiveModeSelection('training')}
+                  className={`w-full text-left p-4 rounded-2xl border-2 transition duration-200 flex gap-4 ${
+                    activeModeSelection === 'training'
+                      ? 'border-blue-500 bg-blue-50/20'
+                      : 'border-slate-100 hover:border-slate-200 bg-slate-50/30'
+                  }`}
+                >
+                  <div className={`p-3 rounded-xl ${activeModeSelection === 'training' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'} shrink-0`}>
+                    <BookOpen className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <h5 className="font-extrabold text-sm text-slate-800 flex items-center gap-1.5">
+                      Training Mode (Luyện tập)
+                      {activeModeSelection === 'training' && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                    </h5>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                      Không giới hạn thời gian. Nộp từng câu và xem kết quả đáp án + giải thích chi tiết ngay lập tức.
+                    </p>
+                  </div>
+                </button>
+
+                {/* 2. TESTING MODE */}
+                <button
+                  type="button"
+                  onClick={() => setActiveModeSelection('testing')}
+                  className={`w-full text-left p-4 rounded-2xl border-2 transition duration-200 flex gap-4 ${
+                    activeModeSelection === 'testing'
+                      ? 'border-blue-500 bg-blue-50/20'
+                      : 'border-slate-100 hover:border-slate-200 bg-slate-50/30'
+                  }`}
+                >
+                  <div className={`p-3 rounded-xl ${activeModeSelection === 'testing' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'} shrink-0`}>
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <h5 className="font-extrabold text-sm text-slate-800 flex items-center gap-1.5">
+                      Testing Mode (Thi thử)
+                      {activeModeSelection === 'testing' && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                    </h5>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                      Giới hạn thời gian làm bài <span className="font-bold text-slate-700">({selectedExamForMode.Duration || 40} phút)</span>. Chỉ chấm điểm và xem giải thích chi tiết sau khi hoàn thành toàn bộ bài thi.
+                    </p>
+                  </div>
+                </button>
+
+                {/* 3. RACE MODE */}
+                <button
+                  type="button"
+                  onClick={() => setActiveModeSelection('race')}
+                  className={`w-full text-left p-4 rounded-2xl border-2 transition duration-200 flex gap-4 ${
+                    activeModeSelection === 'race'
+                      ? 'border-blue-500 bg-blue-50/20'
+                      : 'border-slate-100 hover:border-slate-200 bg-slate-50/30'
+                  }`}
+                >
+                  <div className={`p-3 rounded-xl ${activeModeSelection === 'race' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400'} shrink-0`}>
+                    <Trophy className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <h5 className="font-extrabold text-sm text-slate-800 flex items-center gap-1.5">
+                      Race Mode (Tốc độ sinh tử)
+                      <span className="px-1.5 py-0.5 text-[8px] font-black bg-amber-500 text-white rounded-full">HOT</span>
+                      {activeModeSelection === 'race' && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                    </h5>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                      Như chế độ Luyện tập nhưng trả lời sai bất kỳ câu hỏi nào sẽ phải dừng cuộc chơi và làm lại từ đầu. Đỉnh cao thử thách!
+                    </p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setSelectedExamForMode(null)}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-xs font-extrabold transition cursor-pointer text-center"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  onClick={() => {
+                    const mode = activeModeSelection;
+                    setSelectedExamForMode(null);
+                    onSelectExam(selectedExamForMode, selectedExamForMode.Level, mode);
+                  }}
+                  className="flex-[2] py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-1.5 transition shadow-lg shadow-blue-100 cursor-pointer text-center"
+                >
+                  Bắt đầu ngay <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

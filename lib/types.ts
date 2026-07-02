@@ -75,6 +75,7 @@ export interface Exam {
   ExamID: string; // "OT1", "OT2"
   Level: 'LV1' | 'LV2' | 'LV3';
   QuestionIDs: string[]; // parsed from the separate Sheet e.g. "LV1_OT1"
+  Duration?: number; // duration in minutes (optional, defaults to 40)
 }
 
 // Global Sync Config

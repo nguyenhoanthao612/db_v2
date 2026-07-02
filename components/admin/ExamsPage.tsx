@@ -16,7 +16,7 @@ export default function ExamsPage() {
 
   // Operations State
   const [selectedExamForOp, setSelectedExamForOp] = useState<Exam | null>(null);
-  const [examOpType, setExamOpType] = useState<'rename' | 'move' | 'copy' | ''>('');
+  const [examOpType, setExamOpType] = useState<'rename' | 'move' | 'copy' | 'duration' | ''>('');
   const [opValue, setOpValue] = useState('');
   const [opTargetLevel, setOpTargetLevel] = useState<'LV1' | 'LV2' | 'LV3'>('LV1');
 
@@ -106,6 +106,27 @@ export default function ExamsPage() {
     setActionLoading(false);
   };
 
+  const handleUpdateDurationSubmit = async () => {
+    if (!selectedExamForOp || !opValue.trim()) return;
+    setActionLoading(true);
+    const mins = parseInt(opValue.trim(), 10);
+    if (isNaN(mins) || mins <= 0) {
+      alert('Vui lòng nhập số phút hợp lệ lớn hơn 0!');
+      setActionLoading(false);
+      return;
+    }
+    const success = await DatabaseService.updateExamDuration(selectedExamForOp.Level, selectedExamForOp.ExamID, mins);
+    if (success) {
+      setExamOpType('');
+      setSelectedExamForOp(null);
+      setOpValue('');
+      loadExams();
+      onSyncComplete();
+      alert('Đã cập nhật thời gian làm bài thành công!');
+    }
+    setActionLoading(false);
+  };
+
   const handleDeleteExam = async (level: 'LV1' | 'LV2' | 'LV3', examId: string) => {
     if (
       !confirm(
@@ -190,6 +211,7 @@ export default function ExamsPage() {
                 </div>
                 <h4 className="text-sm font-black text-slate-800">Đề Ôn Tập: {exam.ExamID}</h4>
                 <p className="text-xs text-slate-400 font-bold">Số lượng câu hỏi đã gán: {exam.QuestionIDs?.length || 0} câu</p>
+                <p className="text-xs text-blue-600 font-extrabold bg-blue-50/50 px-2.5 py-1 rounded-lg w-fit">⏱️ Thời gian: {exam.Duration || 40} phút</p>
               </div>
 
               {/* Actions buttons */}
@@ -226,8 +248,18 @@ export default function ExamsPage() {
                   Sao chép đề
                 </button>
                 <button
+                  onClick={() => {
+                    setSelectedExamForOp(exam);
+                    setExamOpType('duration');
+                    setOpValue(String(exam.Duration || 40));
+                  }}
+                  className="py-1.5 bg-blue-50 hover:bg-blue-100/80 rounded-lg text-blue-600 transition cursor-pointer text-center font-extrabold"
+                >
+                  Thời gian thi
+                </button>
+                <button
                   onClick={() => handleDeleteExam(exam.Level, exam.ExamID)}
-                  className="py-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-red-600 transition cursor-pointer text-center"
+                  className="py-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-red-600 transition cursor-pointer text-center col-span-2"
                 >
                   Xóa đề thi
                 </button>
@@ -272,6 +304,28 @@ export default function ExamsPage() {
                 className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg cursor-pointer"
               >
                 Xác nhận đổi tên
+              </button>
+            </div>
+          )}
+
+          {examOpType === 'duration' && (
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Thời gian làm bài (Phút)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={opValue}
+                  onChange={(e) => setOpValue(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 bg-white font-bold"
+                />
+              </div>
+              <button
+                onClick={handleUpdateDurationSubmit}
+                disabled={actionLoading}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg cursor-pointer"
+              >
+                Xác nhận lưu
               </button>
             </div>
           )}

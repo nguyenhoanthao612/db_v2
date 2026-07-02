@@ -127,7 +127,15 @@ export class DatabaseService {
       // Fetch exams list
       const examRes = await this.callAppsScript('getExams');
       if (examRes.success && examRes.data) {
-        setLocalStorage(this.KEY_EXAMS, examRes.data);
+        const localExams = getLocalStorage<Exam[]>(this.KEY_EXAMS, initialExams);
+        const mergedExams = examRes.data.map((incoming: any) => {
+          const match = localExams.find((e) => e.ExamID === incoming.ExamID && e.Level === incoming.Level);
+          return {
+            ...incoming,
+            Duration: match && match.Duration !== undefined ? match.Duration : incoming.Duration,
+          };
+        });
+        setLocalStorage(this.KEY_EXAMS, mergedExams);
       }
 
       // Fetch Questions table
@@ -525,6 +533,18 @@ export class DatabaseService {
     setLocalStorage(this.KEY_QUESTIONS, questions);
 
     return true;
+  }
+
+  public static async updateExamDuration(level: 'LV1' | 'LV2' | 'LV3', examId: string, duration: number): Promise<boolean> {
+    this.initLocalStorage();
+    const exams = getLocalStorage<Exam[]>(this.KEY_EXAMS, initialExams);
+    const idx = exams.findIndex(e => e.ExamID === examId && e.Level === level);
+    if (idx !== -1) {
+      exams[idx].Duration = duration;
+      setLocalStorage(this.KEY_EXAMS, exams);
+      return true;
+    }
+    return false;
   }
 
   // =======================================================

@@ -18,6 +18,7 @@ export default function Home() {
   const [userRole, setUserRole] = useState<'Admin' | 'Student' | null>(null);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [activeExamLevel, setActiveExamLevel] = useState<'LV1' | 'LV2' | 'LV3' | null>(null);
+  const [selectedMode, setSelectedMode] = useState<'training' | 'testing' | 'race'>('training');
 
   // Sync state
   const [syncTrigger, setSyncTrigger] = useState(0);
@@ -156,6 +157,7 @@ export default function Home() {
                 exam={selectedExam}
                 level={activeExamLevel}
                 student={currentUser}
+                mode={selectedMode}
                 onBack={() => {
                   setSelectedExam(null);
                   setActiveExamLevel(null);
@@ -184,9 +186,10 @@ export default function Home() {
             >
               <StudentDashboard
                 student={currentUser}
-                onSelectExam={(exam, lvl) => {
+                onSelectExam={(exam, lvl, mode) => {
                   setSelectedExam(exam);
                   setActiveExamLevel(lvl);
+                  setSelectedMode(mode);
                 }}
                 syncTrigger={syncTrigger}
               />
