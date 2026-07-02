@@ -92,6 +92,71 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     containerHeight: number;
   } | null>(null);
 
+  const [imageRect, setImageRect] = useState<{
+    width: number;
+    height: number;
+    left: number;
+    top: number;
+  } | null>(null);
+  const quizImgRef = useRef<HTMLImageElement | null>(null);
+
+  const updateQuizImageRect = () => {
+    const img = quizImgRef.current;
+    if (!img) return;
+
+    const rect = img.getBoundingClientRect();
+    const naturalWidth = img.naturalWidth;
+    const naturalHeight = img.naturalHeight;
+
+    if (!naturalWidth || !naturalHeight || !rect.width || !rect.height) return;
+
+    const containerWidth = rect.width;
+    const containerHeight = rect.height;
+
+    const imageRatio = naturalWidth / naturalHeight;
+    const containerRatio = containerWidth / containerHeight;
+
+    let displayedWidth = containerWidth;
+    let displayedHeight = containerHeight;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (containerRatio > imageRatio) {
+      displayedHeight = containerHeight;
+      displayedWidth = containerHeight * imageRatio;
+      offsetX = (containerWidth - displayedWidth) / 2;
+    } else {
+      displayedWidth = containerWidth;
+      displayedHeight = containerWidth / imageRatio;
+      offsetY = (containerHeight - displayedHeight) / 2;
+    }
+
+    setImageRect({
+      width: displayedWidth,
+      height: displayedHeight,
+      left: offsetX,
+      top: offsetY,
+    });
+  };
+
+  useEffect(() => {
+    const img = quizImgRef.current;
+    if (!img) return;
+
+    const observer = new ResizeObserver(() => {
+      updateQuizImageRect();
+    });
+    observer.observe(img);
+
+    img.addEventListener('load', updateQuizImageRect);
+    updateQuizImageRect();
+
+    return () => {
+      observer.disconnect();
+      img.removeEventListener('load', updateQuizImageRect);
+    };
+  }, [questions[currentIdx]?.Image, currentIdx]);
+
   // Load questions
   useEffect(() => {
     async function fetchQuestions() {
@@ -1437,131 +1502,145 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                         className={`relative border-2 border-slate-200/80 rounded-2xl overflow-hidden max-w-2xl mx-auto bg-slate-950 select-none shadow-lg ${
                           isFeedbackActive ? 'cursor-default' : 'cursor-crosshair'
                         }`}
-                        onClick={(e) => {
-                          if (isFeedbackActive) return;
-                          if ((e.target as HTMLElement).closest('.student-hotspot-dot')) {
-                            return;
-                          }
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const clickX = Math.round(((e.clientX - rect.left) / rect.width) * 100);
-                          const clickY = Math.round(((e.clientY - rect.top) / rect.height) * 100);
-
-                          if (dots.length < targetCount) {
-                            const newDots = [...dots, { x: clickX, y: clickY }];
-                            handleSelectAnswer(currentQ.QuestionID, newDots);
-                          }
-                        }}
                       >
                         <img 
+                          ref={quizImgRef}
                           src={currentQ.Image} 
                           alt="Hotspot layout" 
                           className="w-full h-auto opacity-95 max-h-[450px] object-contain pointer-events-none" 
                         />
 
-                        {/* Correct target hotspot zones (Only visible during feedback) */}
-                        {isFeedbackActive && hotspotsList.map((target: any, tIdx: number) => {
-                          const radius = target.radius || 15;
-                          return (
-                            <div
-                              key={`target-${tIdx}`}
-                              className="absolute border-2 border-dashed border-green-500 bg-green-500/10 rounded-full flex items-center justify-center text-[10px] font-black text-green-600 animate-pulse pointer-events-none"
-                              style={{
-                                left: `${target.x}%`,
-                                top: `${target.y}%`,
-                                width: `${radius * 2}%`,
-                                height: `${radius * 2}%`,
-                                transform: 'translate(-50%, -50%)',
-                              }}
-                            >
-                              Vùng {tIdx + 1}
-                            </div>
-                          );
-                        })}
+                        {imageRect && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: `${imageRect.left}px`,
+                              top: `${imageRect.top}px`,
+                              width: `${imageRect.width}px`,
+                              height: `${imageRect.height}px`,
+                            }}
+                            className="pointer-events-auto cursor-crosshair"
+                            onClick={(e) => {
+                              if (isFeedbackActive) return;
+                              if ((e.target as HTMLElement).closest('.student-hotspot-dot')) {
+                                return;
+                              }
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const clickX = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+                              const clickY = Math.round(((e.clientY - rect.top) / rect.height) * 100);
 
-                        {/* Placed dots */}
-                        {dots.map((dot: any, dIdx: number) => {
-                          const isDragging = draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx;
-                          
-                          // Check if this dot is close enough to ANY target hotspot
-                          let isDotCorrect = false;
-                          if (isFeedbackActive) {
-                            isDotCorrect = hotspotsList.some((target: any) => {
+                              if (dots.length < targetCount) {
+                                const newDots = [...dots, { x: clickX, y: clickY }];
+                                handleSelectAnswer(currentQ.QuestionID, newDots);
+                              }
+                            }}
+                          >
+                            {/* Correct target hotspot zones (Only visible during feedback) */}
+                            {isFeedbackActive && hotspotsList.map((target: any, tIdx: number) => {
                               const radius = target.radius || 15;
-                              const dist = Math.sqrt(Math.pow(dot.x - target.x, 2) + Math.pow(dot.y - target.y, 2));
-                              return dist <= radius;
-                            });
-                          }
+                              return (
+                                <div
+                                  key={`target-${tIdx}`}
+                                  className="absolute border-2 border-dashed border-green-500 bg-green-500/10 rounded-full flex items-center justify-center text-[10px] font-black text-green-600 animate-pulse pointer-events-none"
+                                  style={{
+                                    left: `${target.x}%`,
+                                    top: `${target.y}%`,
+                                    width: `${radius * 2}%`,
+                                    height: `${radius * 2}%`,
+                                    transform: 'translate(-50%, -50%)',
+                                  }}
+                                >
+                                  Vùng {tIdx + 1}
+                                </div>
+                              );
+                            })}
 
-                          return (
-                            <div
-                              key={dIdx}
-                              className={`student-hotspot-dot absolute w-7 h-7 text-white rounded-full flex items-center justify-center font-extrabold text-xs shadow-md border-2 border-white select-none z-10 transition-all ${
-                                isFeedbackActive
-                                  ? isDotCorrect
-                                    ? 'bg-green-500 border-green-200'
-                                    : 'bg-red-500 border-red-200'
-                                  : isDragging
-                                    ? 'scale-110 shadow-lg ring-4 ring-rose-400/30 bg-rose-500 cursor-move'
-                                    : 'hover:scale-105 active:scale-95 bg-rose-500 cursor-move'
-                              }`}
-                              style={{
-                                left: `${dot.x}%`,
-                                top: `${dot.y}%`,
-                                transform: 'translate(-50%, -50%)',
-                                touchAction: 'none',
-                              }}
-                              onPointerDown={(e) => {
-                                if (isFeedbackActive) return;
-                                const rect = e.currentTarget.parentElement?.getBoundingClientRect();
-                                if (!rect) return;
-                                e.stopPropagation();
-                                setDraggingDot({
-                                  qId: currentQ.QuestionID,
-                                  index: dIdx,
-                                  startX: e.clientX,
-                                  startY: e.clientY,
-                                  startDotX: dot.x,
-                                  startDotY: dot.y,
-                                  containerWidth: rect.width,
-                                  containerHeight: rect.height,
+                            {/* Placed dots */}
+                            {dots.map((dot: any, dIdx: number) => {
+                              const isDragging = draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx;
+                              
+                              // Check if this dot is close enough to ANY target hotspot
+                              let isDotCorrect = false;
+                              if (isFeedbackActive) {
+                                isDotCorrect = hotspotsList.some((target: any) => {
+                                  const radius = target.radius || 15;
+                                  const dist = Math.sqrt(Math.pow(dot.x - target.x, 2) + Math.pow(dot.y - target.y, 2));
+                                  return dist <= radius;
                                 });
-                                e.currentTarget.setPointerCapture(e.pointerId);
-                              }}
-                              onPointerMove={(e) => {
-                                if (isFeedbackActive) return;
-                                if (draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx) {
-                                  const deltaX = e.clientX - draggingDot.startX;
-                                  const deltaY = e.clientY - draggingDot.startY;
+                              }
 
-                                  const deltaXPct = (deltaX / draggingDot.containerWidth) * 100;
-                                  const deltaYPct = (deltaY / draggingDot.containerHeight) * 100;
+                              return (
+                                <div
+                                  key={dIdx}
+                                  className={`student-hotspot-dot absolute w-7 h-7 text-white rounded-full flex items-center justify-center font-extrabold text-xs shadow-md border-2 border-white select-none z-10 transition-all ${
+                                    isFeedbackActive
+                                      ? isDotCorrect
+                                        ? 'bg-green-500 border-green-200'
+                                        : 'bg-red-500 border-red-200'
+                                      : isDragging
+                                        ? 'scale-110 shadow-lg ring-4 ring-rose-400/30 bg-rose-500 cursor-move'
+                                        : 'hover:scale-105 active:scale-95 bg-rose-500 cursor-move'
+                                  }`}
+                                  style={{
+                                    left: `${dot.x}%`,
+                                    top: `${dot.y}%`,
+                                    transform: 'translate(-50%, -50%)',
+                                    touchAction: 'none',
+                                  }}
+                                  onPointerDown={(e) => {
+                                    if (isFeedbackActive) return;
+                                    const rect = e.currentTarget.parentElement?.getBoundingClientRect();
+                                    if (!rect) return;
+                                    e.stopPropagation();
+                                    setDraggingDot({
+                                      qId: currentQ.QuestionID,
+                                      index: dIdx,
+                                      startX: e.clientX,
+                                      startY: e.clientY,
+                                      startDotX: dot.x,
+                                      startDotY: dot.y,
+                                      containerWidth: rect.width,
+                                      containerHeight: rect.height,
+                                    });
+                                    e.currentTarget.setPointerCapture(e.pointerId);
+                                  }}
+                                  onPointerMove={(e) => {
+                                    if (isFeedbackActive) return;
+                                    if (draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx) {
+                                      const deltaX = e.clientX - draggingDot.startX;
+                                      const deltaY = e.clientY - draggingDot.startY;
 
-                                  const newX = Math.round(draggingDot.startDotX + deltaXPct);
-                                  const newY = Math.round(draggingDot.startDotY + deltaYPct);
+                                      const deltaXPct = (deltaX / draggingDot.containerWidth) * 100;
+                                      const deltaYPct = (deltaY / draggingDot.containerHeight) * 100;
 
-                                  const boundedX = Math.max(0, Math.min(100, newX));
-                                  const boundedY = Math.max(0, Math.min(100, newY));
+                                      const newX = Math.round(draggingDot.startDotX + deltaXPct);
+                                      const newY = Math.round(draggingDot.startDotY + deltaYPct);
 
-                                  const arr = [...dots];
-                                  if (arr[dIdx]) {
-                                    arr[dIdx] = { x: boundedX, y: boundedY };
-                                    handleSelectAnswer(currentQ.QuestionID, arr);
-                                  }
-                                }
-                              }}
-                              onPointerUp={(e) => {
-                                if (isFeedbackActive) return;
-                                if (draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx) {
-                                  e.currentTarget.releasePointerCapture(e.pointerId);
-                                  setDraggingDot(null);
-                                }
-                              }}
-                              title={isFeedbackActive ? (isDotCorrect ? 'Đúng vị trí' : 'Sai vị trí') : `Dấu chấm ${dIdx + 1} (Kéo để di chuyển)`}
-                            >
-                              {dIdx + 1}
-                            </div>
-                          );
-                        })}
+                                      const boundedX = Math.max(0, Math.min(100, newX));
+                                      const boundedY = Math.max(0, Math.min(100, newY));
+
+                                      const arr = [...dots];
+                                      if (arr[dIdx]) {
+                                        arr[dIdx] = { x: boundedX, y: boundedY };
+                                        handleSelectAnswer(currentQ.QuestionID, arr);
+                                      }
+                                    }
+                                  }}
+                                  onPointerUp={(e) => {
+                                    if (isFeedbackActive) return;
+                                    if (draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx) {
+                                      e.currentTarget.releasePointerCapture(e.pointerId);
+                                      setDraggingDot(null);
+                                    }
+                                  }}
+                                  title={isFeedbackActive ? (isDotCorrect ? 'Đúng vị trí' : 'Sai vị trí') : `Dấu chấm ${dIdx + 1} (Kéo để di chuyển)`}
+                                >
+                                  {dIdx + 1}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200/60 max-w-2xl mx-auto">

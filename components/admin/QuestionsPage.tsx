@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DatabaseService } from '@/lib/database-service';
 import { Question, IC3QuestionType, QuestionAnswers } from '@/lib/types';
 import { useAdmin } from '@/components/admin/AdminContext';
@@ -70,8 +70,8 @@ export default function QuestionsPage() {
   const [catItems, setCatItems] = useState<{ name: string; category: string }[]>([{ name: '', category: '' }]);
 
   // For Hotspots
-  const [hotspotsList, setHotspotsList] = useState<{ id: string; name: string; x: number; y: number; w: number; h: number }[]>([
-    { id: 'hotspot_1', name: 'Nút A', x: 10, y: 10, w: 20, h: 20 },
+  const [hotspotsList, setHotspotsList] = useState<{ id: string; name: string; x: number; y: number; w: number; h: number; radius?: number }[]>([
+    { id: 'hotspot_1', name: 'Nút A', x: 10, y: 10, w: 20, h: 20, radius: 10 },
   ]);
   const [correctHotspotId, setCorrectHotspotId] = useState('hotspot_1');
   const [draggingSpot, setDraggingSpot] = useState<{
@@ -83,6 +83,71 @@ export default function QuestionsPage() {
     containerWidth: number;
     containerHeight: number;
   } | null>(null);
+
+  const [imageRect, setImageRect] = useState<{
+    width: number;
+    height: number;
+    left: number;
+    top: number;
+  } | null>(null);
+  const adminImgRef = useRef<HTMLImageElement | null>(null);
+
+  const updateAdminImageRect = () => {
+    const img = adminImgRef.current;
+    if (!img) return;
+
+    const rect = img.getBoundingClientRect();
+    const naturalWidth = img.naturalWidth;
+    const naturalHeight = img.naturalHeight;
+
+    if (!naturalWidth || !naturalHeight || !rect.width || !rect.height) return;
+
+    const containerWidth = rect.width;
+    const containerHeight = rect.height;
+
+    const imageRatio = naturalWidth / naturalHeight;
+    const containerRatio = containerWidth / containerHeight;
+
+    let displayedWidth = containerWidth;
+    let displayedHeight = containerHeight;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (containerRatio > imageRatio) {
+      displayedHeight = containerHeight;
+      displayedWidth = containerHeight * imageRatio;
+      offsetX = (containerWidth - displayedWidth) / 2;
+    } else {
+      displayedWidth = containerWidth;
+      displayedHeight = containerWidth / imageRatio;
+      offsetY = (containerHeight - displayedHeight) / 2;
+    }
+
+    setImageRect({
+      width: displayedWidth,
+      height: displayedHeight,
+      left: offsetX,
+      top: offsetY,
+    });
+  };
+
+  useEffect(() => {
+    const img = adminImgRef.current;
+    if (!img) return;
+
+    const observer = new ResizeObserver(() => {
+      updateAdminImageRect();
+    });
+    observer.observe(img);
+
+    img.addEventListener('load', updateAdminImageRect);
+    updateAdminImageRect();
+
+    return () => {
+      observer.disconnect();
+      img.removeEventListener('load', updateAdminImageRect);
+    };
+  }, [qImageUrl, showQModal]);
 
   // For Match Image to Text
   const [imgTextPairs, setImgTextPairs] = useState<{ img: string; text: string }[]>([{ img: '', text: '' }]);
@@ -186,6 +251,7 @@ export default function QuestionsPage() {
           y: h.y,
           w: h.width ?? 15,
           h: h.height ?? 15,
+          radius: h.radius ?? Math.max(1, Math.round((h.width ?? 15) / 2)) ?? 15,
         }));
         setHotspotsList(hList);
         setCorrectHotspotId(q.CorrectAnswer);
@@ -289,6 +355,7 @@ export default function QuestionsPage() {
         y: h.y,
         width: h.w,
         height: h.h,
+        radius: h.radius ?? Math.max(1, Math.round(h.w / 2)) ?? 15,
       }));
       finalAnswersObj = { hotspots: hList };
       finalCorrectAnswerStr = correctHotspotId;
@@ -348,9 +415,7 @@ export default function QuestionsPage() {
 
   // Drag handles for Hotspot Editor
   const handleSpotMouseDown = (e: React.MouseEvent, spotId: string) => {
-    const container = document.getElementById('hotspot-editor-container');
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
+    if (!imageRect) return;
     const spot = hotspotsList.find((h) => h.id === spotId);
     if (!spot) return;
 
@@ -360,8 +425,8 @@ export default function QuestionsPage() {
       startY: e.clientY,
       startSpotX: spot.x,
       startSpotY: spot.y,
-      containerWidth: rect.width,
-      containerHeight: rect.height,
+      containerWidth: imageRect.width,
+      containerHeight: imageRect.height,
     });
   };
 
@@ -371,11 +436,11 @@ export default function QuestionsPage() {
     const deltaX = e.clientX - draggingSpot.startX;
     const deltaY = e.clientY - draggingSpot.startY;
 
-    const pctX = Math.round((deltaX / draggingSpot.containerWidth) * 100);
-    const pctY = Math.round((deltaY / draggingSpot.containerHeight) * 100);
+    const pctX = (deltaX / draggingSpot.containerWidth) * 100;
+    const pctY = (deltaY / draggingSpot.containerHeight) * 100;
 
-    const newX = Math.max(0, Math.min(100 - 15, draggingSpot.startSpotX + pctX));
-    const newY = Math.max(0, Math.min(100 - 15, draggingSpot.startSpotY + pctY));
+    const newX = Math.round(Math.max(0, Math.min(100, draggingSpot.startSpotX + pctX)));
+    const newY = Math.round(Math.max(0, Math.min(100, draggingSpot.startSpotY + pctY)));
 
     setHotspotsList((prev) =>
       prev.map((h) => (h.id === draggingSpot.id ? { ...h, x: newX, y: newY } : h))
@@ -1201,18 +1266,14 @@ export default function QuestionsPage() {
                             <div className="flex gap-2 text-[10px] text-slate-400 font-bold items-center">
                               <span>X: {h.x}%</span>
                               <span>Y: {h.y}%</span>
-                              <span>W:</span>
+                              <span>Bán kính (Radius %):</span>
                               <input
                                 type="number"
-                                value={h.w}
-                                onChange={(e) => setHotspotsList(hotspotsList.map((spot) => (spot.id === h.id ? { ...spot, w: Number(e.target.value) } : spot)))}
-                                className="w-12 px-1 py-1 border border-slate-200 rounded font-bold"
-                              />
-                              <span>H:</span>
-                              <input
-                                type="number"
-                                value={h.h}
-                                onChange={(e) => setHotspotsList(hotspotsList.map((spot) => (spot.id === h.id ? { ...spot, h: Number(e.target.value) } : spot)))}
+                                value={h.radius ?? Math.max(1, Math.round(h.w / 2)) ?? 15}
+                                onChange={(e) => {
+                                  const newRad = Number(e.target.value);
+                                  setHotspotsList(hotspotsList.map((spot) => (spot.id === h.id ? { ...spot, radius: newRad, w: newRad * 2, h: newRad * 2 } : spot)));
+                                }}
                                 className="w-12 px-1 py-1 border border-slate-200 rounded font-bold"
                               />
                             </div>
@@ -1252,7 +1313,7 @@ export default function QuestionsPage() {
                     {/* INTERACTIVE PREVIEW BUILDER STAGE */}
                     {qImageUrl ? (
                       <div className="space-y-1.5">
-                        <label className="text-[10px] text-slate-400 font-bold">BẢN ĐỒ XEM TRƯỚC VÀ KÉO THẢ ĐỊNH VỊ:</label>
+                        <label className="text-[10px] text-slate-400 font-bold">BẢN ĐỒ XEM TRƯỚC VÀ KÉO THẢ ĐỊNH VỊ (HỌC SINH SẼ THẤY ĐÚNG NHƯ VẬY):</label>
                         <div
                           id="hotspot-editor-container"
                           onMouseMove={handleSpotMouseMove}
@@ -1262,36 +1323,52 @@ export default function QuestionsPage() {
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
+                            ref={adminImgRef}
                             src={qImageUrl}
                             alt="Interactive hotspot builder"
                             className="w-full h-full object-contain pointer-events-none"
                             referrerPolicy="no-referrer"
                           />
 
-                          {hotspotsList.map((h, idx) => {
-                            const isCorrect = correctHotspotId === h.id;
-                            return (
-                              <div
-                                key={h.id}
-                                onMouseDown={(e) => handleSpotMouseDown(e, h.id)}
-                                style={{
-                                  left: `${h.x}%`,
-                                  top: `${h.y}%`,
-                                  width: `${h.w}%`,
-                                  height: `${h.h}%`,
-                                }}
-                                className={`absolute border-2 flex flex-col items-center justify-center transition-colors cursor-move shadow-md ${
-                                  isCorrect
-                                    ? 'bg-green-500/20 border-green-500 text-green-700'
-                                    : 'bg-blue-500/20 border-blue-500 text-blue-700'
-                                }`}
-                              >
-                                <span className="bg-slate-900/80 text-white text-[8px] font-black px-1 py-0.5 rounded pointer-events-none">
-                                  #{idx + 1}
-                                </span>
-                              </div>
-                            );
-                          })}
+                          {imageRect && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                left: `${imageRect.left}px`,
+                                top: `${imageRect.top}px`,
+                                width: `${imageRect.width}px`,
+                                height: `${imageRect.height}px`,
+                              }}
+                              className="pointer-events-auto"
+                            >
+                              {hotspotsList.map((h, idx) => {
+                                const isCorrect = correctHotspotId === h.id;
+                                const radius = h.radius ?? Math.max(1, Math.round(h.w / 2)) ?? 15;
+                                return (
+                                  <div
+                                    key={h.id}
+                                    onMouseDown={(e) => handleSpotMouseDown(e, h.id)}
+                                    style={{
+                                      left: `${h.x}%`,
+                                      top: `${h.y}%`,
+                                      width: `${radius * 2}%`,
+                                      aspectRatio: '1 / 1',
+                                      transform: 'translate(-50%, -50%)',
+                                    }}
+                                    className={`absolute border-2 rounded-full flex flex-col items-center justify-center transition-colors cursor-move shadow-md ${
+                                      isCorrect
+                                        ? 'bg-green-500/20 border-green-500 text-green-700'
+                                        : 'bg-blue-500/20 border-blue-500 text-blue-700'
+                                    }`}
+                                  >
+                                    <span className="bg-slate-900/80 text-white text-[8px] font-black px-1 py-0.5 rounded pointer-events-none">
+                                      #{idx + 1}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ) : (
