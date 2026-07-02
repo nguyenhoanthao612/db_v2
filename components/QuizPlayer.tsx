@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Exam, Question, ScoreRecord, QuestionAnswers } from '@/lib/types';
 import { DatabaseService } from '@/lib/database-service';
-import { Check, X, Clock, Award, AlertCircle, ArrowLeft, ArrowRight, Save, Play, RefreshCw, Volume2, HelpCircle } from 'lucide-react';
+import { Check, X, Clock, Award, AlertCircle, ArrowLeft, ArrowRight, Save, Play, RefreshCw, Volume2, HelpCircle, Flag } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface QuizPlayerProps {
@@ -19,6 +19,7 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
   const [loading, setLoading] = useState(true);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answersState, setAnswersState] = useState<Record<string, any>>({}); // Map QuestionID -> Student's answer
+  const [flaggedQuestions, setFlaggedQuestions] = useState<Record<string, boolean>>({}); // Map QuestionID -> Flagged status
   const [timer, setTimer] = useState(0); // in seconds
   const [quizFinished, setQuizFinished] = useState(false);
   const [scoreRecord, setScoreRecord] = useState<ScoreRecord | null>(null);
@@ -380,9 +381,27 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
             <div className="bg-white border border-blue-100/60 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
               {/* Header Info */}
               <div className="flex justify-between items-center">
-                <span className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] font-black rounded-full select-none">
-                  DẠNG: {currentQ.QuestionType}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] font-black rounded-full select-none">
+                    DẠNG: {currentQ.QuestionType}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setFlaggedQuestions((prev) => ({
+                        ...prev,
+                        [currentQ.QuestionID]: !prev[currentQ.QuestionID],
+                      }));
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-black rounded-full transition-all duration-200 border cursor-pointer select-none ${
+                      flaggedQuestions[currentQ.QuestionID]
+                        ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-500 shadow-sm shadow-amber-100'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200'
+                    }`}
+                  >
+                    <Flag className={`w-3 h-3 ${flaggedQuestions[currentQ.QuestionID] ? 'fill-current' : ''}`} />
+                    {flaggedQuestions[currentQ.QuestionID] ? 'Đã gắn cờ' : 'Gắn cờ'}
+                  </button>
+                </div>
                 <span className="text-xs text-slate-400 font-bold">Điểm số: {currentQ.Score}đ</span>
               </div>
 
@@ -1353,24 +1372,41 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
               {questions.map((q, idx) => {
                 const ans = answersState[q.QuestionID];
                 const isSelected = currentIdx === idx;
-                const isAnswered =
-                  ans !== null &&
-                  ans !== undefined &&
-                  (typeof ans === 'object' ? Object.keys(ans).length > 0 : String(ans).trim() !== '');
+                const isAnswered = (() => {
+                  if (ans === null || ans === undefined) return false;
+                  if (Array.isArray(ans)) {
+                    if (q.QuestionType === 'Match Image To Text') {
+                      return ans.some(v => v !== null && v !== undefined);
+                    }
+                    return ans.length > 0;
+                  }
+                  if (typeof ans === 'object') {
+                    return Object.keys(ans).length > 0;
+                  }
+                  return String(ans).trim() !== '';
+                })();
+                const isFlagged = flaggedQuestions[q.QuestionID];
 
                 return (
                   <button
                     key={q.QuestionID}
                     onClick={() => setCurrentIdx(idx)}
-                    className={`h-9 w-full rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center ${
+                    className={`h-9 w-full rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 relative ${
                       isSelected
                         ? 'bg-blue-500 text-white shadow-md shadow-blue-200'
                         : isAnswered
-                        ? 'bg-blue-50 text-blue-600 border border-blue-100 font-black'
+                        ? isFlagged
+                          ? 'bg-amber-50 text-amber-700 border-2 border-amber-400 font-black'
+                          : 'bg-blue-50 text-blue-600 border border-blue-100 font-black'
+                        : isFlagged
+                        ? 'bg-amber-50/40 text-amber-600 border-2 border-amber-300'
                         : 'bg-slate-100 hover:bg-slate-200 text-slate-400'
                     }`}
                   >
-                    {idx + 1}
+                    <span>{idx + 1}</span>
+                    {isFlagged && (
+                      <Flag className={`w-3 h-3 shrink-0 ${isSelected ? 'text-white fill-white' : 'text-amber-500 fill-amber-500'}`} />
+                    )}
                   </button>
                 );
               })}
@@ -1388,6 +1424,12 @@ export default function QuizPlayer({ exam, level, student, onBack, syncTrigger }
               <div className="flex items-center gap-2">
                 <span className="w-3.5 h-3.5 rounded-md bg-slate-100 shrink-0" />
                 <span>Chưa làm</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 rounded-md bg-amber-50 text-amber-600 border border-amber-300 flex items-center justify-center shrink-0">
+                  <Flag className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                </span>
+                <span>Đã gắn cờ</span>
               </div>
             </div>
 
