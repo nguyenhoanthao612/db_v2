@@ -33,6 +33,7 @@ export default function ExamsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadExams();
   }, [syncTrigger]);
 

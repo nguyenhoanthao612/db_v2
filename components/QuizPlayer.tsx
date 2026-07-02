@@ -17,6 +17,7 @@ interface QuizPlayerProps {
 
 export default function QuizPlayer({ exam, level, student, mode, onBack, syncTrigger }: QuizPlayerProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [questionsShuffledOptions, setQuestionsShuffledOptions] = useState<Record<string, number[]>>({});
   const [loading, setLoading] = useState(true);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answersState, setAnswersState] = useState<Record<string, any>>({}); // Map QuestionID -> Student's answer
@@ -52,11 +53,32 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
         // Match exactly the order in the Exam's questionIDs list
         const orderedQs = exam.QuestionIDs.map((id) => allQs.find((q) => q.QuestionID === id)).filter(Boolean) as Question[];
 
-        setQuestions(orderedQs);
+        // Shuffling logic based on mode: testing is shuffled, training and race are not
+        let finalQs = [...orderedQs];
+        if (mode === 'testing') {
+          finalQs.sort(() => Math.random() - 0.5);
+        }
+        setQuestions(finalQs);
+
+        // Generate shuffled options indices for ALL questions
+        const shuffledMap: Record<string, number[]> = {};
+        finalQs.forEach((q) => {
+          try {
+            const parsedAnswers: QuestionAnswers = JSON.parse(q.Answers);
+            if (parsedAnswers.options) {
+              const indices = parsedAnswers.options.map((_, i) => i);
+              const shuffled = [...indices].sort(() => Math.random() - 0.5);
+              shuffledMap[q.QuestionID] = shuffled;
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        });
+        setQuestionsShuffledOptions(shuffledMap);
 
         // Initialize state
         const initialAnswers: Record<string, any> = {};
-        orderedQs.forEach((q) => {
+        finalQs.forEach((q) => {
           const parsedAnswers: QuestionAnswers = JSON.parse(q.Answers);
           if (q.QuestionType === 'Multiple Choice' || q.QuestionType === 'True / False' || q.QuestionType === 'Video Based') {
             initialAnswers[q.QuestionID] = null;
@@ -65,7 +87,9 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
           } else if (q.QuestionType === 'Matching') {
             initialAnswers[q.QuestionID] = {}; // leftItem -> rightItem
           } else if (q.QuestionType === 'Sequence Ordering') {
-            initialAnswers[q.QuestionID] = parsedAnswers.sequenceItems ? [...parsedAnswers.sequenceItems] : [];
+            const items = parsedAnswers.sequenceItems ? [...parsedAnswers.sequenceItems] : [];
+            // Pre-shuffle sequence items so the student starts with a randomized layout
+            initialAnswers[q.QuestionID] = [...items].sort(() => Math.random() - 0.5);
           } else if (q.QuestionType === 'True/False Multiple') {
             initialAnswers[q.QuestionID] = {}; // statement -> true/false
           } else if (q.QuestionType === 'Categorization') {
@@ -86,7 +110,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
       }
     }
     fetchQuestions();
-  }, [exam, level, syncTrigger]);
+  }, [exam, level, mode, syncTrigger]);
 
   const [shuffledImageIndices, setShuffledImageIndices] = useState<number[]>([]);
   const [selectedMatchImgIdx, setSelectedMatchImgIdx] = useState<number | null>(null);
@@ -146,11 +170,14 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     }
   }, [currentIdx, questions]);
 
+  const handleFinishRef = useRef<() => Promise<void>>(null as any);
+
   // Start Timer
   useEffect(() => {
     if (!loading && !quizFinished && questions.length > 0) {
       if (mode === 'testing') {
         // Initialize timer to exam duration in seconds if it's 0 or not initialized
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setTimer((prev) => (prev === 0 ? (exam.Duration || 40) * 60 : prev));
       } else {
         setTimer(0);
@@ -163,7 +190,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
               clearInterval(timerRef.current!);
               // Auto-finish on next tick or immediately
               setTimeout(() => {
-                handleFinish();
+                handleFinishRef.current?.();
               }, 0);
               return 0;
             }
@@ -177,7 +204,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [loading, quizFinished, questions, mode]);
+  }, [loading, quizFinished, questions, mode, exam.Duration]);
 
   const handleSelectAnswer = (qId: string, answer: any) => {
     setAnswersState((prev) => ({
@@ -348,6 +375,10 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     await DatabaseService.submitScore(record);
   };
 
+  useEffect(() => {
+    handleFinishRef.current = handleFinish;
+  }, [handleFinish]);
+
   const handleSubmitQuestion = async () => {
     const q = questions[currentIdx];
     const ans = answersState[q.QuestionID];
@@ -448,6 +479,35 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   const currentAnswer = answersState[currentQ.QuestionID];
   const parsedAnswers: QuestionAnswers = JSON.parse(currentQ.Answers);
 
+  const isCurrentAnswered = (() => {
+    if (currentAnswer === null || currentAnswer === undefined) return false;
+    if (Array.isArray(currentAnswer)) {
+      if (currentQ.QuestionType?.toLowerCase() === 'match image to text') {
+        return currentAnswer.some(v => v !== null && v !== undefined);
+      }
+      return currentAnswer.length > 0;
+    }
+    if (typeof currentAnswer === 'object') {
+      return Object.keys(currentAnswer).length > 0;
+    }
+    return String(currentAnswer).trim() !== '';
+  })();
+
+  const hasUnanswered = questions.some((q) => {
+    const ans = answersState[q.QuestionID];
+    if (ans === null || ans === undefined) return true;
+    if (Array.isArray(ans)) {
+      if (q.QuestionType?.toLowerCase() === 'match image to text') {
+        return !ans.some(v => v !== null && v !== undefined);
+      }
+      return ans.length === 0;
+    }
+    if (typeof ans === 'object') {
+      return Object.keys(ans).length === 0;
+    }
+    return String(ans).trim() === '';
+  });
+
   return (
     <div id="quiz-player" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {!quizFinished ? (
@@ -536,74 +596,84 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
               {/* RENDER INTERACTIVE WIDGET BASED ON 11 IC3 QUESTION TYPES */}
               <div className="pt-4 border-t border-slate-100">
                 {/* 1. MULTIPLE CHOICE */}
-                {currentQ.QuestionType === 'Multiple Choice' && parsedAnswers.options && (
-                  <div className="space-y-3">
-                    {parsedAnswers.options.map((option, idx) => {
-                      const isSelected = currentAnswer === idx;
-                      return (
-                        <button
-                          key={idx}
-                          onClick={() => handleSelectAnswer(currentQ.QuestionID, idx)}
-                          className={`w-full text-left p-4 rounded-xl border text-sm transition-all duration-200 cursor-pointer flex items-center justify-between ${
-                            isSelected
-                              ? 'bg-blue-50 border-blue-400 text-blue-700 font-bold shadow-sm'
-                              : 'bg-white border-slate-200 hover:bg-slate-50/50 text-slate-600'
-                          }`}
-                        >
-                          <span>{option}</span>
-                          <span
-                            className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
-                              isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-300'
+                {currentQ.QuestionType === 'Multiple Choice' && parsedAnswers.options && (() => {
+                  const options = parsedAnswers.options!;
+                  const shuffledIndices = questionsShuffledOptions[currentQ.QuestionID] || options.map((_, i) => i);
+                  return (
+                    <div className="space-y-3">
+                      {shuffledIndices.map((originalIdx) => {
+                        const option = options[originalIdx];
+                        const isSelected = currentAnswer === originalIdx;
+                        return (
+                          <button
+                            key={originalIdx}
+                            onClick={() => handleSelectAnswer(currentQ.QuestionID, originalIdx)}
+                            className={`w-full text-left p-4 rounded-xl border text-sm transition-all duration-200 cursor-pointer flex items-center justify-between ${
+                              isSelected
+                                ? 'bg-blue-50 border-blue-400 text-blue-700 font-bold shadow-sm'
+                                : 'bg-white border-slate-200 hover:bg-slate-50/50 text-slate-600'
                             }`}
                           >
-                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                            <span>{option}</span>
+                            <span
+                              className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                                isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-300'
+                              }`}
+                            >
+                              {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
 
                 {/* 2. MULTIPLE RESPONSE */}
-                {currentQ.QuestionType === 'Multiple Response' && parsedAnswers.options && (
-                  <div className="space-y-3">
-                    {parsedAnswers.options.map((option, idx) => {
-                      const isSelected = (currentAnswer || []).includes(idx);
-                      const toggleOption = () => {
-                        const currentList: number[] = currentAnswer || [];
-                        if (currentList.includes(idx)) {
-                          handleSelectAnswer(
-                            currentQ.QuestionID,
-                            currentList.filter((item) => item !== idx)
-                          );
-                        } else {
-                          handleSelectAnswer(currentQ.QuestionID, [...currentList, idx]);
-                        }
-                      };
+                {currentQ.QuestionType === 'Multiple Response' && parsedAnswers.options && (() => {
+                  const options = parsedAnswers.options!;
+                  const shuffledIndices = questionsShuffledOptions[currentQ.QuestionID] || options.map((_, i) => i);
+                  return (
+                    <div className="space-y-3">
+                      {shuffledIndices.map((originalIdx) => {
+                        const option = options[originalIdx];
+                        const isSelected = (currentAnswer || []).includes(originalIdx);
+                        const toggleOption = () => {
+                          const currentList: number[] = currentAnswer || [];
+                          if (currentList.includes(originalIdx)) {
+                            handleSelectAnswer(
+                              currentQ.QuestionID,
+                              currentList.filter((item) => item !== originalIdx)
+                            );
+                          } else {
+                            handleSelectAnswer(currentQ.QuestionID, [...currentList, originalIdx]);
+                          }
+                        };
 
-                      return (
-                        <button
-                          key={idx}
-                          onClick={toggleOption}
-                          className={`w-full text-left p-4 rounded-xl border text-sm transition-all duration-200 cursor-pointer flex items-center justify-between ${
-                            isSelected
-                              ? 'bg-indigo-50 border-indigo-400 text-indigo-700 font-bold shadow-sm'
-                              : 'bg-white border-slate-200 hover:bg-slate-50/50 text-slate-600'
-                          }`}
-                        >
-                          <span>{option}</span>
-                          <span
-                            className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
-                              isSelected ? 'border-indigo-500 bg-indigo-500 text-white' : 'border-slate-300'
+                        return (
+                          <button
+                            key={originalIdx}
+                            onClick={toggleOption}
+                            className={`w-full text-left p-4 rounded-xl border text-sm transition-all duration-200 cursor-pointer flex items-center justify-between ${
+                              isSelected
+                                ? 'bg-indigo-50 border-indigo-400 text-indigo-700 font-bold shadow-sm'
+                                : 'bg-white border-slate-200 hover:bg-slate-50/50 text-slate-600'
                             }`}
                           >
-                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                            <span>{option}</span>
+                            <span
+                              className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
+                                isSelected ? 'border-indigo-500 bg-indigo-500 text-white' : 'border-slate-300'
+                              }`}
+                            >
+                              {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
 
                 {/* 3. TRUE / FALSE */}
                 {currentQ.QuestionType === 'True / False' && (
@@ -940,41 +1010,46 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                   </div>
                 )}
 
-                {/* 7. VIDEO BASED */}
-                {currentQ.QuestionType === 'Video Based' && currentQ.Video && parsedAnswers.options && (
-                  <div className="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                    <div className="bg-slate-900 rounded-2xl overflow-hidden aspect-video relative shadow-inner border border-slate-800 flex items-center justify-center">
-                      <video src={currentQ.Video} controls className="w-full h-full object-contain" />
-                    </div>
+                 {/* 7. VIDEO BASED */}
+                {currentQ.QuestionType === 'Video Based' && currentQ.Video && parsedAnswers.options && (() => {
+                  const options = parsedAnswers.options!;
+                  const shuffledIndices = questionsShuffledOptions[currentQ.QuestionID] || options.map((_, i) => i);
+                  return (
+                    <div className="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                      <div className="bg-slate-900 rounded-2xl overflow-hidden aspect-video relative shadow-inner border border-slate-800 flex items-center justify-center">
+                        <video src={currentQ.Video} controls className="w-full h-full object-contain" />
+                      </div>
 
-                    <div className="space-y-3">
-                      <p className="text-[11px] font-black uppercase text-indigo-500 tracking-wide">Lựa chọn của bạn:</p>
-                      {parsedAnswers.options.map((option, idx) => {
-                        const isSelected = currentAnswer === idx;
-                        return (
-                          <button
-                            key={idx}
-                            onClick={() => handleSelectAnswer(currentQ.QuestionID, idx)}
-                            className={`w-full text-left p-3.5 rounded-xl border text-xs transition-all duration-200 cursor-pointer flex items-center justify-between ${
-                              isSelected
-                                ? 'bg-blue-50 border-blue-400 text-blue-700 font-bold shadow-sm'
-                                : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-600'
-                            }`}
-                          >
-                            <span>{option}</span>
-                            <span
-                              className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                                isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-300'
+                      <div className="space-y-3">
+                        <p className="text-[11px] font-black uppercase text-indigo-500 tracking-wide">Lựa chọn của bạn:</p>
+                        {shuffledIndices.map((originalIdx) => {
+                          const option = options[originalIdx];
+                          const isSelected = currentAnswer === originalIdx;
+                          return (
+                            <button
+                              key={originalIdx}
+                              onClick={() => handleSelectAnswer(currentQ.QuestionID, originalIdx)}
+                              className={`w-full text-left p-3.5 rounded-xl border text-xs transition-all duration-200 cursor-pointer flex items-center justify-between ${
+                                isSelected
+                                  ? 'bg-blue-50 border-blue-400 text-blue-700 font-bold shadow-sm'
+                                  : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-600'
                               }`}
                             >
-                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                            </span>
-                          </button>
-                        );
-                      })}
+                              <span>{option}</span>
+                              <span
+                                className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                                  isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-300'
+                                }`}
+                              >
+                                {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* 8. CATEGORIZATION */}
                 {currentQ.QuestionType === 'Categorization' && parsedAnswers.categoryItems && parsedAnswers.categories && (
@@ -1436,8 +1511,8 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
             </div>
 
             {/* Pagination controls */}
-            <div className="flex justify-between items-center">
-              {mode === 'testing' ? (
+            <div className="flex justify-between items-center gap-4">
+              {(mode === 'testing' || mode === 'training') ? (
                 <>
                   <button
                     disabled={currentIdx === 0}
@@ -1447,6 +1522,20 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                     <ArrowLeft className="w-4 h-4" /> Câu trước
                   </button>
 
+                  {mode === 'training' && (
+                    <button
+                      disabled={!isCurrentAnswered}
+                      onClick={handleSubmitQuestion}
+                      className={`px-6 py-2.5 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md transition-all select-none ${
+                        !isCurrentAnswered
+                          ? 'bg-slate-300 shadow-none cursor-not-allowed'
+                          : 'bg-blue-500 hover:bg-blue-600 shadow-blue-100 cursor-pointer'
+                      }`}
+                    >
+                      <Check className="w-4 h-4" /> Nộp câu trả lời
+                    </button>
+                  )}
+
                   {currentIdx < questions.length - 1 ? (
                     <button
                       onClick={handleNext}
@@ -1455,19 +1544,40 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                       Câu tiếp theo <ArrowRight className="w-4 h-4" />
                     </button>
                   ) : (
-                    <button
-                      onClick={handleFinish}
-                      className="px-6 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md shadow-green-100 cursor-pointer select-none"
-                    >
-                      <Save className="w-4 h-4" /> Nộp bài thi
-                    </button>
+                    mode === 'testing' ? (
+                      <button
+                        disabled={hasUnanswered}
+                        onClick={handleFinish}
+                        className={`px-6 py-2.5 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md transition-all select-none ${
+                          hasUnanswered
+                            ? 'bg-slate-300 shadow-none cursor-not-allowed'
+                            : 'bg-green-500 hover:bg-green-600 shadow-green-100 cursor-pointer'
+                        }`}
+                        title={hasUnanswered ? 'Vui lòng chọn đáp án cho tất cả câu hỏi trước khi nộp' : 'Nộp bài thi'}
+                      >
+                        <Save className="w-4 h-4" /> Nộp bài thi
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleFinish}
+                        className="px-6 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md shadow-green-100 cursor-pointer select-none"
+                      >
+                        <Save className="w-4 h-4" /> Hoàn thành bài học
+                      </button>
+                    )
                   )}
                 </>
               ) : (
+                /* Race mode */
                 <div className="w-full">
                   <button
+                    disabled={!isCurrentAnswered}
                     onClick={handleSubmitQuestion}
-                    className="w-full py-3.5 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-blue-100 cursor-pointer select-none"
+                    className={`w-full py-3.5 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md transition-all select-none ${
+                      !isCurrentAnswered
+                        ? 'bg-slate-300 shadow-none cursor-not-allowed'
+                        : 'bg-blue-500 hover:bg-blue-600 shadow-blue-100 cursor-pointer'
+                    }`}
                   >
                     <Check className="w-4 h-4" /> Nộp câu trả lời
                   </button>
@@ -1507,13 +1617,13 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                   <button
                     key={q.QuestionID}
                     onClick={() => {
-                      if (mode === 'testing') {
+                      if (mode === 'testing' || mode === 'training') {
                         setCurrentIdx(idx);
                       }
                     }}
-                    disabled={mode !== 'testing'}
+                    disabled={mode !== 'testing' && mode !== 'training'}
                     className={`h-9 w-full rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1 relative ${
-                      mode === 'testing' ? 'cursor-pointer' : 'cursor-default'
+                      (mode === 'testing' || mode === 'training') ? 'cursor-pointer' : 'cursor-default'
                     } ${
                       isSelected
                         ? 'bg-blue-500 text-white shadow-md shadow-blue-200'
@@ -1558,10 +1668,16 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
             {mode === 'testing' && (
               <button
+                disabled={hasUnanswered}
                 onClick={handleFinish}
-                className="w-full py-3 bg-green-500 hover:bg-green-600 text-white text-xs font-extrabold rounded-xl shadow-md shadow-green-100 transition cursor-pointer select-none"
+                className={`w-full py-3 text-white text-xs font-extrabold rounded-xl shadow-md transition-all select-none ${
+                  hasUnanswered
+                    ? 'bg-slate-300 shadow-none cursor-not-allowed'
+                    : 'bg-green-500 hover:bg-green-600 shadow-green-100 cursor-pointer'
+                }`}
+                title={hasUnanswered ? 'Vui lòng chọn đáp án cho tất cả câu hỏi trước khi nộp' : 'Nộp bài ngay'}
               >
-                Nộp bài ngay
+                {hasUnanswered ? 'Chưa hoàn thành tất cả' : 'Nộp bài ngay'}
               </button>
             )}
           </div>

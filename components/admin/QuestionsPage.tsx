@@ -125,6 +125,7 @@ export default function QuestionsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadQuestions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncTrigger, qOffset, qSearch, qLevelFilter, qExamFilter, qTypeFilter]);
@@ -1161,7 +1162,7 @@ export default function QuestionsPage() {
                       <label className="block text-[10px] text-slate-400">THIẾT LẬP ĐIỂM NÓNG TRỰC QUAN (HOTSPOT)</label>
                       <p className="text-[11px] text-slate-400 font-bold mt-1">
                         1. Điền link ảnh ở mục ảnh phía trên.<br />
-                        2. Nhấp "+ Thêm điểm nóng" để vẽ ô tương tác.<br />
+                        2. Nhấp &quot;+ Thêm điểm nóng&quot; để vẽ ô tương tác.<br />
                         3. Kéo thả ô chấm đỏ trực tiếp trên khung ảnh xem trước bên dưới để căn chỉnh vị trí tọa độ (%).<br />
                         4. Tích chọn điểm nào là Đáp Án Đúng cho câu hỏi này.
                       </p>

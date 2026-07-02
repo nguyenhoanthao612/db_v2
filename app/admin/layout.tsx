@@ -25,8 +25,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (storedUser && storedRole) {
       const parsedUser = JSON.parse(storedUser);
       if (storedRole === 'Admin') {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setCurrentUser(parsedUser);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setUserRole('Admin');
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIsLoading(false);
       } else {
         router.replace('/');
