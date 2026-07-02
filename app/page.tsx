@@ -2,17 +2,18 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { DatabaseService } from '@/lib/database-service';
 import { Exam } from '@/lib/types';
 import Header from '@/components/Header';
 import AuthModal from '@/components/AuthModal';
 import StudentDashboard from '@/components/StudentDashboard';
-import AdminDashboard from '@/components/AdminDashboard';
 import QuizPlayer from '@/components/QuizPlayer';
 import { Database, X, HelpCircle, FileSpreadsheet, RefreshCw, CheckCircle, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function Home() {
+  const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<'Admin' | 'Student' | null>(null);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
@@ -38,19 +39,25 @@ export default function Home() {
     if (storedUser && storedRole) {
       setCurrentUser(JSON.parse(storedUser));
       setUserRole(storedRole as any);
+      if (storedRole === 'Admin') {
+        router.push('/admin/reports');
+      }
     }
 
     const config = DatabaseService.getSyncConfig();
     if (config.appsScriptUrl) {
       setSettingsUrl(config.appsScriptUrl);
     }
-  }, []);
+  }, [router]);
 
   const handleLoginSuccess = (user: any, role: 'Admin' | 'Student') => {
     setCurrentUser(user);
     setUserRole(role);
     sessionStorage.setItem('ic3_current_user', JSON.stringify(user));
     sessionStorage.setItem('ic3_user_role', role);
+    if (role === 'Admin') {
+      router.push('/admin/reports');
+    }
   };
 
   const handleLogout = () => {
@@ -160,16 +167,12 @@ export default function Home() {
           ) : userRole === 'Admin' ? (
             <motion.div
               key="admin"
-              initial={{ opacity: 0, scale: 0.99 }}
-              animate={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              className="flex items-center justify-center p-8"
             >
-              <AdminDashboard
-                syncTrigger={syncTrigger}
-                onSyncComplete={triggerSyncUpdate}
-                onOpenSettings={() => setShowSettings(true)}
-              />
+              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             </motion.div>
           ) : (
             <motion.div
