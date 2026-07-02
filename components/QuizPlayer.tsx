@@ -536,6 +536,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   const currentQ = questions[currentIdx];
   const currentAnswer = answersState[currentQ.QuestionID];
   const parsedAnswers: QuestionAnswers = JSON.parse(currentQ.Answers);
+  const isFeedbackActive = showFeedbackModal;
 
   const isCurrentAnswered = (() => {
     if (currentAnswer === null || currentAnswer === undefined) return false;
@@ -662,23 +663,51 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                       {shuffledIndices.map((originalIdx) => {
                         const option = options[originalIdx];
                         const isSelected = currentAnswer === originalIdx;
+                        const isCorrectOption = originalIdx === Number(currentQ.CorrectAnswer);
+
+                        let styleClass = 'bg-white border-slate-200 hover:bg-slate-50/50 text-slate-600';
+                        if (isFeedbackActive) {
+                          if (isCorrectOption) {
+                            styleClass = 'bg-green-50 border-green-500 text-green-700 font-bold shadow-sm';
+                          } else if (isSelected) {
+                            styleClass = 'bg-red-50 border-red-500 text-red-700 font-bold shadow-sm';
+                          }
+                        } else if (isSelected) {
+                          styleClass = 'bg-blue-50 border-blue-400 text-blue-700 font-bold shadow-sm';
+                        }
+
                         return (
                           <button
                             key={originalIdx}
+                            disabled={isFeedbackActive}
                             onClick={() => handleSelectAnswer(currentQ.QuestionID, originalIdx)}
-                            className={`w-full text-left p-4 rounded-xl border text-sm transition-all duration-200 cursor-pointer flex items-center justify-between ${
-                              isSelected
-                                ? 'bg-blue-50 border-blue-400 text-blue-700 font-bold shadow-sm'
-                                : 'bg-white border-slate-200 hover:bg-slate-50/50 text-slate-600'
-                            }`}
+                            className={`w-full text-left p-4 rounded-xl border text-sm transition-all duration-200 flex items-center justify-between ${
+                              isFeedbackActive ? 'cursor-default' : 'cursor-pointer'
+                            } ${styleClass}`}
                           >
                             <span>{option}</span>
                             <span
                               className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
-                                isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-300'
+                                isFeedbackActive
+                                  ? isCorrectOption
+                                    ? 'border-green-500 bg-green-500 text-white'
+                                    : isSelected
+                                      ? 'border-red-500 bg-red-500 text-white'
+                                      : 'border-slate-300'
+                                  : isSelected
+                                    ? 'border-blue-500 bg-blue-500 text-white'
+                                    : 'border-slate-300'
                               }`}
                             >
-                              {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              {isFeedbackActive ? (
+                                isCorrectOption ? (
+                                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                ) : isSelected ? (
+                                  <X className="w-3.5 h-3.5 stroke-[3]" />
+                                ) : null
+                              ) : (
+                                isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />
+                              )}
                             </span>
                           </button>
                         );
@@ -691,11 +720,19 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                 {currentQ.QuestionType === 'Multiple Response' && parsedAnswers.options && (() => {
                   const options = parsedAnswers.options!;
                   const shuffledIndices = questionsShuffledOptions[currentQ.QuestionID] || options.map((_, i) => i);
+                  let correctIndices: number[] = [];
+                  try {
+                    correctIndices = JSON.parse(currentQ.CorrectAnswer || '[]');
+                  } catch (e) {
+                    console.error(e);
+                  }
+
                   return (
                     <div className="space-y-3">
                       {shuffledIndices.map((originalIdx) => {
                         const option = options[originalIdx];
                         const isSelected = (currentAnswer || []).includes(originalIdx);
+                        const isCorrectOption = correctIndices.includes(originalIdx);
                         const toggleOption = () => {
                           const currentList: number[] = currentAnswer || [];
                           if (currentList.includes(originalIdx)) {
@@ -708,23 +745,49 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                           }
                         };
 
+                        let styleClass = 'bg-white border-slate-200 hover:bg-slate-50/50 text-slate-600';
+                        if (isFeedbackActive) {
+                          if (isCorrectOption) {
+                            styleClass = 'bg-green-50 border-green-500 text-green-700 font-bold shadow-sm';
+                          } else if (isSelected) {
+                            styleClass = 'bg-red-50 border-red-500 text-red-700 font-bold shadow-sm';
+                          }
+                        } else if (isSelected) {
+                          styleClass = 'bg-indigo-50 border-indigo-400 text-indigo-700 font-bold shadow-sm';
+                        }
+
                         return (
                           <button
                             key={originalIdx}
+                            disabled={isFeedbackActive}
                             onClick={toggleOption}
-                            className={`w-full text-left p-4 rounded-xl border text-sm transition-all duration-200 cursor-pointer flex items-center justify-between ${
-                              isSelected
-                                ? 'bg-indigo-50 border-indigo-400 text-indigo-700 font-bold shadow-sm'
-                                : 'bg-white border-slate-200 hover:bg-slate-50/50 text-slate-600'
-                            }`}
+                            className={`w-full text-left p-4 rounded-xl border text-sm transition-all duration-200 flex items-center justify-between ${
+                              isFeedbackActive ? 'cursor-default' : 'cursor-pointer'
+                            } ${styleClass}`}
                           >
                             <span>{option}</span>
                             <span
                               className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
-                                isSelected ? 'border-indigo-500 bg-indigo-500 text-white' : 'border-slate-300'
+                                isFeedbackActive
+                                  ? isCorrectOption
+                                    ? 'border-green-500 bg-green-500 text-white'
+                                    : isSelected
+                                      ? 'border-red-500 bg-red-500 text-white'
+                                      : 'border-slate-300'
+                                  : isSelected
+                                    ? 'border-indigo-500 bg-indigo-500 text-white'
+                                    : 'border-slate-300'
                               }`}
                             >
-                              {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              {isFeedbackActive ? (
+                                isCorrectOption ? (
+                                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                ) : isSelected ? (
+                                  <X className="w-3.5 h-3.5 stroke-[3]" />
+                                ) : null
+                              ) : (
+                                isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />
+                              )}
                             </span>
                           </button>
                         );
@@ -738,17 +801,29 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                   <div className="grid grid-cols-2 gap-4">
                     {['Đúng', 'Sai'].map((label) => {
                       const isSelected = currentAnswer === label;
+                      const isCorrectOption = label === currentQ.CorrectAnswer;
+
+                      let styleClass = 'bg-white border-slate-200 hover:bg-slate-50 text-slate-500';
+                      if (isFeedbackActive) {
+                        if (isCorrectOption) {
+                          styleClass = 'bg-green-50 border-green-500 text-green-700 shadow-md shadow-green-100/50';
+                        } else if (isSelected) {
+                          styleClass = 'bg-red-50 border-red-500 text-red-700 shadow-md shadow-red-100/50';
+                        }
+                      } else if (isSelected) {
+                        styleClass = label === 'Đúng'
+                          ? 'bg-green-50 border-green-500 text-green-700 shadow-md shadow-green-100/50'
+                          : 'bg-red-50 border-red-500 text-red-700 shadow-md shadow-red-100/50';
+                      }
+
                       return (
                         <button
                           key={label}
+                          disabled={isFeedbackActive}
                           onClick={() => handleSelectAnswer(currentQ.QuestionID, label)}
-                          className={`py-6 rounded-2xl border text-center font-extrabold text-sm transition-all duration-200 cursor-pointer ${
-                            isSelected
-                              ? label === 'Đúng'
-                                ? 'bg-green-50 border-green-500 text-green-700 shadow-md shadow-green-100/50'
-                                : 'bg-red-50 border-red-500 text-red-700 shadow-md shadow-red-100/50'
-                              : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-500'
-                          }`}
+                          className={`py-6 rounded-2xl border text-center font-extrabold text-sm transition-all duration-200 ${
+                            isFeedbackActive ? 'cursor-default' : 'cursor-pointer'
+                          } ${styleClass}`}
                         >
                           <p className="text-lg">{label}</p>
                           <span className="text-[10px] uppercase font-bold text-slate-400 mt-1 block">
@@ -766,6 +841,12 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                   const unassignedRightOptions = (shuffledRightOptions.length > 0 ? shuffledRightOptions : parsedAnswers.rightOptions).filter(
                     rOpt => !Object.values(currentAnsMap).includes(rOpt)
                   );
+                  let correctMap: Record<string, string> = {};
+                  try {
+                    correctMap = JSON.parse(currentQ.CorrectAnswer || '{}');
+                  } catch (e) {
+                    console.error(e);
+                  }
 
                   return (
                     <div className="space-y-4">
@@ -804,77 +885,102 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                 <div className="text-slate-300 font-extrabold text-sm select-none">➔</div>
 
                                 {/* Drop / Match Slot */}
-                                <div
-                                  className={`relative w-44 min-h-[70px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-2.5 transition-all flex-shrink-0 ${
-                                    hasMatch 
-                                      ? 'border-indigo-200 bg-indigo-50/20' 
-                                      : selectedMatchingRightOpt !== null
-                                        ? 'border-indigo-400 bg-indigo-50 animate-pulse cursor-pointer'
-                                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'
-                                  }`}
-                                  onDragOver={(e) => e.preventDefault()}
-                                  onDragEnter={(e) => {
-                                    e.preventDefault();
-                                    e.currentTarget.classList.add('border-indigo-500', 'bg-indigo-50');
-                                  }}
-                                  onDragLeave={(e) => {
-                                    e.preventDefault();
-                                    e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
-                                  }}
-                                  onDrop={(e) => {
-                                    e.preventDefault();
-                                    e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
-                                    const rightVal = e.dataTransfer.getData("text/plain");
-                                    if (rightVal && rightVal !== "") {
-                                      const updated = { ...currentAnsMap };
-                                      // Clear any existing pairing mapping to this same rightVal to maintain 1-to-1
-                                      Object.keys(updated).forEach((k) => {
-                                        if (updated[k] === rightVal) {
-                                          delete updated[k];
-                                        }
-                                      });
-                                      updated[leftVal] = rightVal;
-                                      handleSelectAnswer(currentQ.QuestionID, updated);
-                                      setSelectedMatchingRightOpt(null);
-                                    }
-                                  }}
-                                  onClick={() => {
-                                    if (selectedMatchingRightOpt !== null) {
-                                      const updated = { ...currentAnsMap };
-                                      Object.keys(updated).forEach((k) => {
-                                        if (updated[k] === selectedMatchingRightOpt) {
-                                          delete updated[k];
-                                        }
-                                      });
-                                      updated[leftVal] = selectedMatchingRightOpt;
-                                      handleSelectAnswer(currentQ.QuestionID, updated);
-                                      setSelectedMatchingRightOpt(null);
-                                    }
-                                  }}
-                                >
-                                  {hasMatch ? (
-                                    <div className="relative w-full text-center text-[11px] font-bold text-slate-700 bg-white border border-slate-200 p-2 rounded-lg leading-snug shadow-sm">
-                                      <span>{pairedRight}</span>
-                                      {/* Remove Assignment button */}
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          const updated = { ...currentAnsMap };
-                                          delete updated[leftVal];
-                                          handleSelectAnswer(currentQ.QuestionID, updated);
-                                        }}
-                                        className="absolute -top-2 -right-2 bg-rose-500 hover:bg-rose-600 text-white p-0.5 rounded-full shadow transition-transform hover:scale-110 cursor-pointer"
-                                        title="Hủy ghép cặp"
-                                      >
-                                        <X className="w-3 h-3" />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <div className="text-center pointer-events-none select-none p-1">
-                                      <span className="text-[10px] font-extrabold text-slate-400 block leading-tight">
-                                        {selectedMatchingRightOpt !== null ? 'Chạm để thả' : 'Kéo thả vào đây'}
-                                      </span>
+                                <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                                  <div
+                                    className={`relative w-44 min-h-[70px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-2.5 transition-all flex-shrink-0 ${
+                                      isFeedbackActive
+                                        ? hasMatch
+                                          ? pairedRight === correctMap[leftVal]
+                                            ? 'border-green-500 bg-green-50/20'
+                                            : 'border-red-500 bg-red-50/20'
+                                          : 'border-slate-200 bg-slate-50/50'
+                                        : hasMatch 
+                                          ? 'border-indigo-200 bg-indigo-50/20' 
+                                          : selectedMatchingRightOpt !== null
+                                            ? 'border-indigo-400 bg-indigo-50 animate-pulse cursor-pointer'
+                                            : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'
+                                    }`}
+                                    onDragOver={(e) => !isFeedbackActive && e.preventDefault()}
+                                    onDragEnter={(e) => {
+                                      if (isFeedbackActive) return;
+                                      e.preventDefault();
+                                      e.currentTarget.classList.add('border-indigo-500', 'bg-indigo-50');
+                                    }}
+                                    onDragLeave={(e) => {
+                                      if (isFeedbackActive) return;
+                                      e.preventDefault();
+                                      e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
+                                    }}
+                                    onDrop={(e) => {
+                                      if (isFeedbackActive) return;
+                                      e.preventDefault();
+                                      e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
+                                      const rightVal = e.dataTransfer.getData("text/plain");
+                                      if (rightVal && rightVal !== "") {
+                                        const updated = { ...currentAnsMap };
+                                        // Clear any existing pairing mapping to this same rightVal to maintain 1-to-1
+                                        Object.keys(updated).forEach((k) => {
+                                          if (updated[k] === rightVal) {
+                                            delete updated[k];
+                                          }
+                                        });
+                                        updated[leftVal] = rightVal;
+                                        handleSelectAnswer(currentQ.QuestionID, updated);
+                                        setSelectedMatchingRightOpt(null);
+                                      }
+                                    }}
+                                    onClick={() => {
+                                      if (isFeedbackActive) return;
+                                      if (selectedMatchingRightOpt !== null) {
+                                        const updated = { ...currentAnsMap };
+                                        Object.keys(updated).forEach((k) => {
+                                          if (updated[k] === selectedMatchingRightOpt) {
+                                            delete updated[k];
+                                          }
+                                        });
+                                        updated[leftVal] = selectedMatchingRightOpt;
+                                        handleSelectAnswer(currentQ.QuestionID, updated);
+                                        setSelectedMatchingRightOpt(null);
+                                      }
+                                    }}
+                                  >
+                                    {hasMatch ? (
+                                      <div className={`relative w-full text-center text-[11px] font-bold p-2 rounded-lg leading-snug shadow-sm ${
+                                        isFeedbackActive
+                                          ? pairedRight === correctMap[leftVal]
+                                            ? 'bg-green-50 border border-green-300 text-green-800'
+                                            : 'bg-red-50 border border-red-300 text-red-800'
+                                          : 'bg-white border border-slate-200 text-slate-700'
+                                      }`}>
+                                        <span>{pairedRight}</span>
+                                        {/* Remove Assignment button */}
+                                        {!isFeedbackActive && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const updated = { ...currentAnsMap };
+                                              delete updated[leftVal];
+                                              handleSelectAnswer(currentQ.QuestionID, updated);
+                                            }}
+                                            className="absolute -top-2 -right-2 bg-rose-500 hover:bg-rose-600 text-white p-0.5 rounded-full shadow transition-transform hover:scale-110 cursor-pointer"
+                                            title="Hủy ghép cặp"
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-center pointer-events-none select-none p-1">
+                                        <span className="text-[10px] font-extrabold text-slate-400 block leading-tight">
+                                          {selectedMatchingRightOpt !== null ? 'Chạm để thả' : 'Kéo thả vào đây'}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {isFeedbackActive && (!hasMatch || pairedRight !== correctMap[leftVal]) && (
+                                    <div className="text-[10px] font-black text-green-600 max-w-[176px] text-center leading-tight mt-1">
+                                      ✓ Đúng: {correctMap[leftVal]}
                                     </div>
                                   )}
                                 </div>
@@ -900,8 +1006,9 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                 return (
                                   <div
                                     key={rOpt}
-                                    draggable
+                                    draggable={!isFeedbackActive}
                                     onDragStart={(e) => {
+                                      if (isFeedbackActive) return;
                                       e.dataTransfer.setData("text/plain", rOpt);
                                       setSelectedMatchingRightOpt(rOpt);
                                     }}
@@ -909,16 +1016,19 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                       // Optional clean-up
                                     }}
                                     onClick={() => {
+                                      if (isFeedbackActive) return;
                                       if (isSelected) {
                                         setSelectedMatchingRightOpt(null);
                                       } else {
                                         setSelectedMatchingRightOpt(rOpt);
                                       }
                                     }}
-                                    className={`p-3 rounded-xl border bg-white shadow-sm cursor-grab active:cursor-grabbing transition text-xs font-bold leading-relaxed ${
-                                      isSelected 
-                                        ? 'border-indigo-500 ring-2 ring-indigo-500/10 bg-indigo-50/35 animate-pulse' 
-                                        : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+                                    className={`p-3 rounded-xl border bg-white shadow-sm transition text-xs font-bold leading-relaxed ${
+                                      isFeedbackActive
+                                        ? 'border-slate-200 opacity-50 cursor-default'
+                                        : isSelected 
+                                          ? 'border-indigo-500 ring-2 ring-indigo-500/10 bg-indigo-50/35 animate-pulse cursor-grab active:cursor-grabbing' 
+                                          : 'border-slate-200 hover:border-slate-300 hover:shadow-md cursor-grab active:cursor-grabbing'
                                     }`}
                                   >
                                     <div className="flex gap-2 items-center">
@@ -937,7 +1047,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                           )}
 
                           {/* Reset button inside pool */}
-                          {Object.keys(currentAnsMap).length > 0 && (
+                          {Object.keys(currentAnsMap).length > 0 && !isFeedbackActive && (
                             <button
                               type="button"
                               onClick={() => {
@@ -956,57 +1066,98 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                 })()}
 
                 {/* 5. SEQUENCE ORDERING */}
-                {currentQ.QuestionType === 'Sequence Ordering' && (
-                  <div className="space-y-3">
-                    <p className="text-xs text-blue-600 font-bold bg-blue-50 p-2.5 rounded-lg mb-3">
-                      💡 Sử dụng các phím mũi tên để sắp xếp danh sách các bước theo thứ tự đúng nhất (từ trên xuống dưới):
-                    </p>
+                {currentQ.QuestionType === 'Sequence Ordering' && (() => {
+                  let correctOrder: number[] = [];
+                  let sequenceItems: string[] = [];
+                  try {
+                    correctOrder = JSON.parse(currentQ.CorrectAnswer || '[]');
+                    const parsed: QuestionAnswers = JSON.parse(currentQ.Answers);
+                    sequenceItems = parsed.sequenceItems || [];
+                  } catch (e) {
+                    console.error(e);
+                  }
 
-                    <div className="space-y-2">
-                      {(currentAnswer || []).map((item: string, idx: number) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl shadow-sm text-xs text-slate-700"
-                        >
-                          <span className="w-6 h-6 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs shrink-0">
-                            {idx + 1}
-                          </span>
-                          <span className="flex-1 font-semibold">{item}</span>
+                  return (
+                    <div className="space-y-3">
+                      <p className="text-xs text-blue-600 font-bold bg-blue-50 p-2.5 rounded-lg mb-3">
+                        💡 Sử dụng các phím mũi tên để sắp xếp danh sách các bước theo thứ tự đúng nhất (từ trên xuống dưới):
+                      </p>
 
-                          {/* Quick movement controls */}
-                          <div className="flex gap-1">
-                            <button
-                              disabled={idx === 0}
-                              onClick={() => {
-                                const arr = [...(currentAnswer || [])];
-                                const temp = arr[idx];
-                                arr[idx] = arr[idx - 1];
-                                arr[idx - 1] = temp;
-                                handleSelectAnswer(currentQ.QuestionID, arr);
-                              }}
-                              className="px-2 py-1 bg-slate-100 border border-slate-200 rounded text-[10px] hover:bg-slate-200 disabled:opacity-30 font-extrabold cursor-pointer select-none"
+                      <div className="space-y-2">
+                        {(currentAnswer || []).map((item: string, idx: number) => {
+                          const correctItemText = sequenceItems[correctOrder[idx]];
+                          const isItemCorrect = item === correctItemText;
+
+                          let styleClass = 'bg-white border-slate-200 text-slate-700';
+                          if (isFeedbackActive) {
+                            if (isItemCorrect) {
+                              styleClass = 'bg-green-50 border-green-300 text-green-800';
+                            } else {
+                              styleClass = 'bg-red-50 border-red-300 text-red-800';
+                            }
+                          }
+
+                          return (
+                            <div
+                              key={idx}
+                              className={`flex items-center gap-3 p-3 border rounded-xl shadow-sm text-xs transition-colors ${styleClass}`}
                             >
-                              ▲ Lên
-                            </button>
-                            <button
-                              disabled={idx === (currentAnswer || []).length - 1}
-                              onClick={() => {
-                                const arr = [...(currentAnswer || [])];
-                                const temp = arr[idx];
-                                arr[idx] = arr[idx + 1];
-                                arr[idx + 1] = temp;
-                                handleSelectAnswer(currentQ.QuestionID, arr);
-                              }}
-                              className="px-2 py-1 bg-slate-100 border border-slate-200 rounded text-[10px] hover:bg-slate-200 disabled:opacity-30 font-extrabold cursor-pointer select-none"
-                            >
-                              ▼ Xuống
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                              <span className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
+                                isFeedbackActive
+                                  ? isItemCorrect
+                                    ? 'bg-green-200 text-green-800'
+                                    : 'bg-red-200 text-red-800'
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {idx + 1}
+                              </span>
+                              <div className="flex-1 flex flex-col">
+                                <span className="font-semibold">{item}</span>
+                                {isFeedbackActive && !isItemCorrect && (
+                                  <span className="text-[10px] text-green-600 font-black mt-0.5">
+                                    ✓ Đúng ra là: {correctItemText}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Quick movement controls */}
+                              {!isFeedbackActive && (
+                                <div className="flex gap-1">
+                                  <button
+                                    disabled={idx === 0}
+                                    onClick={() => {
+                                      const arr = [...(currentAnswer || [])];
+                                      const temp = arr[idx];
+                                      arr[idx] = arr[idx - 1];
+                                      arr[idx - 1] = temp;
+                                      handleSelectAnswer(currentQ.QuestionID, arr);
+                                    }}
+                                    className="px-2 py-1 bg-slate-100 border border-slate-200 rounded text-[10px] hover:bg-slate-200 disabled:opacity-30 font-extrabold cursor-pointer select-none"
+                                  >
+                                    ▲ Lên
+                                  </button>
+                                  <button
+                                    disabled={idx === (currentAnswer || []).length - 1}
+                                    onClick={() => {
+                                      const arr = [...(currentAnswer || [])];
+                                      const temp = arr[idx];
+                                      arr[idx] = arr[idx + 1];
+                                      arr[idx + 1] = temp;
+                                      handleSelectAnswer(currentQ.QuestionID, arr);
+                                    }}
+                                    className="px-2 py-1 bg-slate-100 border border-slate-200 rounded text-[10px] hover:bg-slate-200 disabled:opacity-30 font-extrabold cursor-pointer select-none"
+                                  >
+                                    ▼ Xuống
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* 6. TRUE/FALSE MULTIPLE */}
                 {currentQ.QuestionType === 'True/False Multiple' && parsedAnswers.statements && (
@@ -1021,40 +1172,89 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {parsedAnswers.statements.map((stmt) => {
+                          {parsedAnswers.statements.map((stmt, idx) => {
                             const choice = (currentAnswer || {})[stmt];
+                            let correctBooleans: boolean[] = [];
+                            try {
+                              correctBooleans = JSON.parse(currentQ.CorrectAnswer || '[]');
+                            } catch (e) {
+                              console.error(e);
+                            }
+                            const correctVal = correctBooleans[idx] ? 'Đúng' : 'Sai';
+
+                            const isTrueCorrect = (correctVal === 'Đúng');
+                            const isTrueChosen = (choice === 'Đúng');
+                            const isFalseCorrect = (correctVal === 'Sai');
+                            const isFalseChosen = (choice === 'Sai');
+
+                            let trueStyle = 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50';
+                            if (isFeedbackActive) {
+                              if (isTrueCorrect) {
+                                trueStyle = 'bg-green-500 border-green-500 text-white';
+                              } else if (isTrueChosen) {
+                                trueStyle = 'bg-red-500 border-red-500 text-white';
+                              } else {
+                                trueStyle = 'bg-slate-50 border-slate-100 text-slate-300';
+                              }
+                            } else if (isTrueChosen) {
+                              trueStyle = 'bg-green-50 border-green-400 text-green-700';
+                            }
+
+                            let falseStyle = 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50';
+                            if (isFeedbackActive) {
+                              if (isFalseCorrect) {
+                                falseStyle = 'bg-green-500 border-green-500 text-white';
+                              } else if (isFalseChosen) {
+                                falseStyle = 'bg-red-500 border-red-500 text-white';
+                              } else {
+                                falseStyle = 'bg-slate-50 border-slate-100 text-slate-300';
+                              }
+                            } else if (isFalseChosen) {
+                              falseStyle = 'bg-red-50 border-red-400 text-red-700';
+                            }
 
                             return (
                               <tr key={stmt} className="hover:bg-slate-50/40">
-                                <td className="p-3 font-semibold text-slate-700 leading-relaxed">{stmt}</td>
+                                <td className={`p-3 font-semibold leading-relaxed ${
+                                  isFeedbackActive
+                                    ? choice === correctVal
+                                      ? 'text-green-800 bg-green-50/20'
+                                      : 'text-red-800 bg-red-50/20'
+                                    : 'text-slate-700'
+                                }`}>
+                                  {stmt}
+                                  {isFeedbackActive && choice !== correctVal && (
+                                    <span className="block text-[10px] text-green-600 font-black mt-1">
+                                      ✓ Đúng: {correctVal}
+                                    </span>
+                                  )}
+                                </td>
                                 <td className="p-3 text-center">
                                   <button
+                                    disabled={isFeedbackActive}
                                     onClick={() => {
                                       const updated = { ...(currentAnswer || {}) };
                                       updated[stmt] = 'Đúng';
                                       handleSelectAnswer(currentQ.QuestionID, updated);
                                     }}
-                                    className={`w-12 py-1.5 rounded-lg border text-[10px] font-black transition cursor-pointer ${
-                                      choice === 'Đúng'
-                                        ? 'bg-green-50 border-green-400 text-green-700'
-                                        : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'
-                                    }`}
+                                    className={`w-12 py-1.5 rounded-lg border text-[10px] font-black transition ${
+                                      isFeedbackActive ? 'cursor-default' : 'cursor-pointer'
+                                    } ${trueStyle}`}
                                   >
                                     ĐÚNG
                                   </button>
                                 </td>
                                 <td className="p-3 text-center">
                                   <button
+                                    disabled={isFeedbackActive}
                                     onClick={() => {
                                       const updated = { ...(currentAnswer || {}) };
                                       updated[stmt] = 'Sai';
                                       handleSelectAnswer(currentQ.QuestionID, updated);
                                     }}
-                                    className={`w-12 py-1.5 rounded-lg border text-[10px] font-black transition cursor-pointer ${
-                                      choice === 'Sai'
-                                        ? 'bg-red-50 border-red-400 text-red-700'
-                                        : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'
-                                    }`}
+                                    className={`w-12 py-1.5 rounded-lg border text-[10px] font-black transition ${
+                                      isFeedbackActive ? 'cursor-default' : 'cursor-pointer'
+                                    } ${falseStyle}`}
                                   >
                                     SAI
                                   </button>
@@ -1083,23 +1283,51 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                         {shuffledIndices.map((originalIdx) => {
                           const option = options[originalIdx];
                           const isSelected = currentAnswer === originalIdx;
+                          const isCorrectOption = originalIdx === Number(currentQ.CorrectAnswer);
+
+                          let styleClass = 'bg-white border-slate-200 hover:bg-slate-50 text-slate-600';
+                          if (isFeedbackActive) {
+                            if (isCorrectOption) {
+                              styleClass = 'bg-green-50 border-green-500 text-green-700 font-bold shadow-sm';
+                            } else if (isSelected) {
+                              styleClass = 'bg-red-50 border-red-500 text-red-700 font-bold shadow-sm';
+                            }
+                          } else if (isSelected) {
+                            styleClass = 'bg-blue-50 border-blue-400 text-blue-700 font-bold shadow-sm';
+                          }
+
                           return (
                             <button
                               key={originalIdx}
+                              disabled={isFeedbackActive}
                               onClick={() => handleSelectAnswer(currentQ.QuestionID, originalIdx)}
-                              className={`w-full text-left p-3.5 rounded-xl border text-xs transition-all duration-200 cursor-pointer flex items-center justify-between ${
-                                isSelected
-                                  ? 'bg-blue-50 border-blue-400 text-blue-700 font-bold shadow-sm'
-                                  : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-600'
-                              }`}
+                              className={`w-full text-left p-3.5 rounded-xl border text-xs transition-all duration-200 flex items-center justify-between ${
+                                isFeedbackActive ? 'cursor-default' : 'cursor-pointer'
+                              } ${styleClass}`}
                             >
                               <span>{option}</span>
                               <span
                                 className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                                  isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-300'
+                                  isFeedbackActive
+                                    ? isCorrectOption
+                                      ? 'border-green-500 bg-green-500 text-white'
+                                      : isSelected
+                                        ? 'border-red-500 bg-red-500 text-white'
+                                        : 'border-slate-300'
+                                    : isSelected
+                                      ? 'border-blue-500 bg-blue-500 text-white'
+                                      : 'border-slate-300'
                                 }`}
                               >
-                                {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                {isFeedbackActive ? (
+                                  isCorrectOption ? (
+                                    <Check className="w-3 h-3 stroke-[3]" />
+                                  ) : isSelected ? (
+                                    <X className="w-3 h-3 stroke-[3]" />
+                                  ) : null
+                                ) : (
+                                  isSelected && <Check className="w-3 h-3 stroke-[3]" />
+                                )}
                               </span>
                             </button>
                           );
@@ -1119,33 +1347,59 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {parsedAnswers.categoryItems.map((item) => {
                         const selectedCategory = (currentAnswer || {})[item];
+                        let correctMap: Record<string, string> = {};
+                        try {
+                          correctMap = JSON.parse(currentQ.CorrectAnswer || '{}');
+                        } catch (e) {
+                          console.error(e);
+                        }
+                        const isCorrect = selectedCategory === correctMap[item];
+
+                        let containerStyle = 'bg-slate-50 border-slate-200';
+                        if (isFeedbackActive) {
+                          if (isCorrect) {
+                            containerStyle = 'bg-green-50 border-green-300 text-green-800';
+                          } else {
+                            containerStyle = 'bg-red-50 border-red-300 text-red-800';
+                          }
+                        }
 
                         return (
                           <div
                             key={item}
-                            className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2 text-xs"
+                            className={`p-3 border rounded-xl flex flex-col gap-2 text-xs transition-colors ${containerStyle}`}
                           >
-                            <span className="font-bold text-slate-700">{item}</span>
-                            <select
-                              value={selectedCategory || ''}
-                              onChange={(e) => {
-                                const updated = { ...(currentAnswer || {}) };
-                                if (e.target.value === '') {
-                                  delete updated[item];
-                                } else {
-                                  updated[item] = e.target.value;
-                                }
-                                handleSelectAnswer(currentQ.QuestionID, updated);
-                              }}
-                              className="text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none bg-white font-bold text-slate-500"
-                            >
-                              <option value="">-- Chọn nhóm --</option>
-                              {parsedAnswers.categories?.map((cat) => (
-                                <option key={cat} value={cat}>
-                                  {cat}
-                                </option>
-                              ))}
-                            </select>
+                            <div className="flex items-center justify-between gap-2 w-full">
+                              <span className="font-bold text-slate-700">{item}</span>
+                              <select
+                                disabled={isFeedbackActive}
+                                value={selectedCategory || ''}
+                                onChange={(e) => {
+                                  const updated = { ...(currentAnswer || {}) };
+                                  if (e.target.value === '') {
+                                    delete updated[item];
+                                  } else {
+                                    updated[item] = e.target.value;
+                                  }
+                                  handleSelectAnswer(currentQ.QuestionID, updated);
+                                }}
+                                className={`text-xs px-2 py-1.5 border rounded-lg focus:outline-none font-bold ${
+                                  isFeedbackActive ? 'bg-slate-100 border-slate-300 text-slate-400 cursor-default' : 'bg-white border-slate-200 text-slate-500 cursor-pointer'
+                                }`}
+                              >
+                                <option value="">-- Chọn nhóm --</option>
+                                {parsedAnswers.categories?.map((cat) => (
+                                  <option key={cat} value={cat}>
+                                    {cat}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            {isFeedbackActive && !isCorrect && (
+                              <div className="text-[10px] text-green-600 font-black">
+                                ✓ Nhóm đúng: {correctMap[item]}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -1154,9 +1408,9 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                 )}
 
                 {/* 9. HOTSPOT (Click Image Target Coordinate) */}
-                {/* 9. HOTSPOT (Click Image Target Coordinate) */}
                 {currentQ.QuestionType === 'Hotspot' && parsedAnswers.hotspots && currentQ.Image && (() => {
-                  const targetCount = parsedAnswers.hotspots.length;
+                  const hotspotsList = parsedAnswers.hotspots || [];
+                  const targetCount = hotspotsList.length;
                   const dots = Array.isArray(currentAnswer) ? currentAnswer : [];
 
                   return (
@@ -1171,8 +1425,11 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                       </div>
 
                       <div 
-                        className="relative border-2 border-slate-200/80 rounded-2xl overflow-hidden max-w-2xl mx-auto bg-slate-950 select-none shadow-lg cursor-crosshair"
+                        className={`relative border-2 border-slate-200/80 rounded-2xl overflow-hidden max-w-2xl mx-auto bg-slate-950 select-none shadow-lg ${
+                          isFeedbackActive ? 'cursor-default' : 'cursor-crosshair'
+                        }`}
                         onClick={(e) => {
+                          if (isFeedbackActive) return;
                           if ((e.target as HTMLElement).closest('.student-hotspot-dot')) {
                             return;
                           }
@@ -1192,14 +1449,51 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                           className="w-full h-auto opacity-95 max-h-[450px] object-contain pointer-events-none" 
                         />
 
+                        {/* Correct target hotspot zones (Only visible during feedback) */}
+                        {isFeedbackActive && hotspotsList.map((target: any, tIdx: number) => {
+                          const radius = target.radius || 15;
+                          return (
+                            <div
+                              key={`target-${tIdx}`}
+                              className="absolute border-2 border-dashed border-green-500 bg-green-500/10 rounded-full flex items-center justify-center text-[10px] font-black text-green-600 animate-pulse pointer-events-none"
+                              style={{
+                                left: `${target.x}%`,
+                                top: `${target.y}%`,
+                                width: `${radius * 2}%`,
+                                height: `${radius * 2}%`,
+                                transform: 'translate(-50%, -50%)',
+                              }}
+                            >
+                              Vùng {tIdx + 1}
+                            </div>
+                          );
+                        })}
+
                         {/* Placed dots */}
                         {dots.map((dot: any, dIdx: number) => {
                           const isDragging = draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx;
+                          
+                          // Check if this dot is close enough to ANY target hotspot
+                          let isDotCorrect = false;
+                          if (isFeedbackActive) {
+                            isDotCorrect = hotspotsList.some((target: any) => {
+                              const radius = target.radius || 15;
+                              const dist = Math.sqrt(Math.pow(dot.x - target.x, 2) + Math.pow(dot.y - target.y, 2));
+                              return dist <= radius;
+                            });
+                          }
+
                           return (
                             <div
                               key={dIdx}
-                              className={`student-hotspot-dot absolute w-7 h-7 bg-rose-500 hover:bg-rose-600 text-white rounded-full flex items-center justify-center font-extrabold text-xs shadow-md border-2 border-white cursor-move select-none z-10 transition-transform ${
-                                isDragging ? 'scale-110 shadow-lg ring-4 ring-rose-400/30' : 'hover:scale-105 active:scale-95'
+                              className={`student-hotspot-dot absolute w-7 h-7 text-white rounded-full flex items-center justify-center font-extrabold text-xs shadow-md border-2 border-white select-none z-10 transition-all ${
+                                isFeedbackActive
+                                  ? isDotCorrect
+                                    ? 'bg-green-500 border-green-200'
+                                    : 'bg-red-500 border-red-200'
+                                  : isDragging
+                                    ? 'scale-110 shadow-lg ring-4 ring-rose-400/30 bg-rose-500 cursor-move'
+                                    : 'hover:scale-105 active:scale-95 bg-rose-500 cursor-move'
                               }`}
                               style={{
                                 left: `${dot.x}%`,
@@ -1208,6 +1502,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                 touchAction: 'none',
                               }}
                               onPointerDown={(e) => {
+                                if (isFeedbackActive) return;
                                 const rect = e.currentTarget.parentElement?.getBoundingClientRect();
                                 if (!rect) return;
                                 e.stopPropagation();
@@ -1224,6 +1519,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                 e.currentTarget.setPointerCapture(e.pointerId);
                               }}
                               onPointerMove={(e) => {
+                                if (isFeedbackActive) return;
                                 if (draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx) {
                                   const deltaX = e.clientX - draggingDot.startX;
                                   const deltaY = e.clientY - draggingDot.startY;
@@ -1245,12 +1541,13 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                 }
                               }}
                               onPointerUp={(e) => {
+                                if (isFeedbackActive) return;
                                 if (draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx) {
                                   e.currentTarget.releasePointerCapture(e.pointerId);
                                   setDraggingDot(null);
                                 }
                               }}
-                              title={`Dấu chấm ${dIdx + 1} (Kéo để di chuyển)`}
+                              title={isFeedbackActive ? (isDotCorrect ? 'Đúng vị trí' : 'Sai vị trí') : `Dấu chấm ${dIdx + 1} (Kéo để di chuyển)`}
                             >
                               {dIdx + 1}
                             </div>
@@ -1263,7 +1560,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                           Đã đánh dấu: <strong className="text-indigo-600 font-extrabold">{dots.length}</strong> / <strong className="text-slate-700">{targetCount}</strong> dấu chấm
                         </span>
 
-                        {dots.length > 0 && (
+                        {dots.length > 0 && !isFeedbackActive && (
                           <button
                             type="button"
                             onClick={() => handleSelectAnswer(currentQ.QuestionID, [])}
@@ -1285,6 +1582,13 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                   // i.e., indices where currentAnswer[imgIdx] is null or undefined
                   const unassignedImageIndices = shuffledImageIndices.filter(imgIdx => currentAnswer[imgIdx] === null || currentAnswer[imgIdx] === undefined);
 
+                  let correctOrder: number[] = [];
+                  try {
+                    correctOrder = JSON.parse(currentQ.CorrectAnswer || '[]');
+                  } catch (e) {
+                    console.error(e);
+                  }
+
                   return (
                     <div className="space-y-4">
                       <div className="bg-indigo-50 border border-indigo-100 text-indigo-700 p-3.5 rounded-2xl text-xs font-bold leading-relaxed shadow-sm">
@@ -1304,6 +1608,10 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                             // Find if any image is matched with this text index (tIdx)
                             const matchedImgIdx = currentAnswer.findIndex((val: any) => val === tIdx);
                             const hasMatch = matchedImgIdx !== -1;
+                            const isMatchCorrect = hasMatch && correctOrder[matchedImgIdx] === tIdx;
+
+                            // Also find what the correct image index is for this slot
+                            const correctImgIdxForSlot = correctOrder.indexOf(tIdx);
 
                             return (
                               <div 
@@ -1323,86 +1631,111 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                 <div className="text-slate-300 font-extrabold text-sm select-none">➔</div>
 
                                 {/* Drop / Match Slot */}
-                                <div
-                                  className={`relative w-28 h-20 border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-1 transition-all flex-shrink-0 ${
-                                    hasMatch 
-                                      ? 'border-indigo-200 bg-indigo-50/20' 
-                                      : selectedMatchImgIdx !== null
-                                        ? 'border-indigo-400 bg-indigo-50 animate-pulse cursor-pointer'
-                                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'
-                                  }`}
-                                  onDragOver={(e) => e.preventDefault()}
-                                  onDragEnter={(e) => {
-                                    e.preventDefault();
-                                    e.currentTarget.classList.add('border-indigo-500', 'bg-indigo-50');
-                                  }}
-                                  onDragLeave={(e) => {
-                                    e.preventDefault();
-                                    e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
-                                  }}
-                                  onDrop={(e) => {
-                                    e.preventDefault();
-                                    e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
-                                    const imgIdxStr = e.dataTransfer.getData("text/plain");
-                                    if (imgIdxStr !== "") {
-                                      const imgIdx = parseInt(imgIdxStr, 10);
-                                      const arr = [...currentAnswer];
-                                      // Clear other assignments to this text slot (1-to-1)
-                                      arr.forEach((val, i) => {
-                                        if (val === tIdx) {
-                                          arr[i] = null;
-                                        }
-                                      });
-                                      arr[imgIdx] = tIdx;
-                                      handleSelectAnswer(currentQ.QuestionID, arr);
-                                      setSelectedMatchImgIdx(null);
-                                    }
-                                  }}
-                                  onClick={() => {
-                                    if (selectedMatchImgIdx !== null) {
-                                      const arr = [...currentAnswer];
-                                      arr.forEach((val, i) => {
-                                        if (val === tIdx) {
-                                          arr[i] = null;
-                                        }
-                                      });
-                                      arr[selectedMatchImgIdx] = tIdx;
-                                      handleSelectAnswer(currentQ.QuestionID, arr);
-                                      setSelectedMatchImgIdx(null);
-                                    }
-                                  }}
-                                >
-                                  {hasMatch ? (
-                                    <div className="relative w-full h-full group">
-                                      <img 
-                                        src={parsedAnswers.imageOptions?.[matchedImgIdx]} 
-                                        alt={`Matched visual ${matchedImgIdx}`} 
-                                        className="w-full h-full object-contain rounded-lg pointer-events-none"
-                                      />
-                                      {/* Remove Assignment button */}
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          const arr = [...currentAnswer];
-                                          arr[matchedImgIdx] = null;
-                                          handleSelectAnswer(currentQ.QuestionID, arr);
-                                        }}
-                                        className="absolute -top-2 -right-2 bg-rose-500 hover:bg-rose-600 text-white p-0.5 rounded-full shadow transition-transform hover:scale-110 cursor-pointer"
-                                        title="Hủy ghép cặp"
-                                      >
-                                        <X className="w-3 h-3" />
-                                      </button>
-                                      <div className="absolute bottom-0.5 left-0.5 bg-slate-900/70 text-[8px] text-white px-1 py-0.5 rounded font-black">
-                                        Ảnh {matchedImgIdx + 1}
+                                <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                                  <div
+                                    className={`relative w-28 h-20 border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-1 transition-all flex-shrink-0 ${
+                                      isFeedbackActive
+                                        ? hasMatch
+                                          ? isMatchCorrect
+                                            ? 'border-green-500 bg-green-50/20'
+                                            : 'border-red-500 bg-red-50/20'
+                                          : 'border-slate-200 bg-slate-50/50'
+                                        : hasMatch 
+                                          ? 'border-indigo-200 bg-indigo-50/20' 
+                                          : selectedMatchImgIdx !== null
+                                            ? 'border-indigo-400 bg-indigo-50 animate-pulse cursor-pointer'
+                                            : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'
+                                    }`}
+                                    onDragOver={(e) => !isFeedbackActive && e.preventDefault()}
+                                    onDragEnter={(e) => {
+                                      if (isFeedbackActive) return;
+                                      e.preventDefault();
+                                      e.currentTarget.classList.add('border-indigo-500', 'bg-indigo-50');
+                                    }}
+                                    onDragLeave={(e) => {
+                                      if (isFeedbackActive) return;
+                                      e.preventDefault();
+                                      e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
+                                    }}
+                                    onDrop={(e) => {
+                                      if (isFeedbackActive) return;
+                                      e.preventDefault();
+                                      e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
+                                      const imgIdxStr = e.dataTransfer.getData("text/plain");
+                                      if (imgIdxStr !== "") {
+                                        const imgIdx = parseInt(imgIdxStr, 10);
+                                        const arr = [...currentAnswer];
+                                        // Clear other assignments to this text slot (1-to-1)
+                                        arr.forEach((val, i) => {
+                                          if (val === tIdx) {
+                                            arr[i] = null;
+                                          }
+                                        });
+                                        arr[imgIdx] = tIdx;
+                                        handleSelectAnswer(currentQ.QuestionID, arr);
+                                        setSelectedMatchImgIdx(null);
+                                      }
+                                    }}
+                                    onClick={() => {
+                                      if (isFeedbackActive) return;
+                                      if (selectedMatchImgIdx !== null) {
+                                        const arr = [...currentAnswer];
+                                        arr.forEach((val, i) => {
+                                          if (val === tIdx) {
+                                            arr[i] = null;
+                                          }
+                                        });
+                                        arr[selectedMatchImgIdx] = tIdx;
+                                        handleSelectAnswer(currentQ.QuestionID, arr);
+                                        setSelectedMatchImgIdx(null);
+                                      }
+                                    }}
+                                  >
+                                    {hasMatch ? (
+                                      <div className="relative w-full h-full group">
+                                        <img 
+                                          src={parsedAnswers.imageOptions?.[matchedImgIdx]} 
+                                          alt={`Matched visual ${matchedImgIdx}`} 
+                                          className="w-full h-full object-contain rounded-lg pointer-events-none"
+                                        />
+                                        {/* Remove Assignment button */}
+                                        {!isFeedbackActive && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const arr = [...currentAnswer];
+                                              arr[matchedImgIdx] = null;
+                                              handleSelectAnswer(currentQ.QuestionID, arr);
+                                            }}
+                                            className="absolute -top-2 -right-2 bg-rose-500 hover:bg-rose-600 text-white p-0.5 rounded-full shadow transition-transform hover:scale-110 cursor-pointer"
+                                            title="Hủy ghép cặp"
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                        <div className={`absolute bottom-0.5 left-0.5 text-[8px] px-1 py-0.5 rounded font-black ${
+                                          isFeedbackActive
+                                            ? isMatchCorrect
+                                              ? 'bg-green-600 text-white'
+                                              : 'bg-red-600 text-white'
+                                            : 'bg-slate-900/70 text-white'
+                                        }`}>
+                                          Ảnh {matchedImgIdx + 1}
+                                        </div>
                                       </div>
-                                    </div>
-                                  ) : (
-                                    <div className="text-center pointer-events-none select-none p-1">
-                                      <span className="text-[10px] font-extrabold text-slate-400 block leading-tight">
-                                        {selectedMatchImgIdx !== null ? 'Chạm để thả' : 'Thả ảnh ở đây'}
-                                      </span>
-                                    </div>
+                                    ) : (
+                                      <div className="text-center pointer-events-none select-none p-1">
+                                        <span className="text-[10px] font-extrabold text-slate-400 block leading-tight">
+                                          {selectedMatchImgIdx !== null ? 'Chạm để thả' : 'Thả ảnh ở đây'}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {isFeedbackActive && !isMatchCorrect && correctImgIdxForSlot !== -1 && (
+                                    <span className="text-[9px] font-black text-green-600 text-center leading-tight mt-0.5">
+                                      ✓ Ảnh đúng: {correctImgIdxForSlot + 1}
+                                    </span>
                                   )}
                                 </div>
                               </div>
@@ -1428,25 +1761,29 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                 return (
                                   <div
                                     key={imgIdx}
-                                    draggable="true"
+                                    draggable={!isFeedbackActive ? "true" : "false"}
                                     onDragStart={(e) => {
+                                      if (isFeedbackActive) return;
                                       e.dataTransfer.setData("text/plain", imgIdx.toString());
                                       setSelectedMatchImgIdx(imgIdx);
                                     }}
                                     onDragEnd={() => setSelectedMatchImgIdx(null)}
                                     onClick={() => {
+                                      if (isFeedbackActive) return;
                                       if (selectedMatchImgIdx === imgIdx) {
                                         setSelectedMatchImgIdx(null);
                                       } else {
                                         setSelectedMatchImgIdx(imgIdx);
                                       }
                                     }}
-                                    className={`relative aspect-square border-2 rounded-xl overflow-hidden bg-white cursor-grab active:cursor-grabbing p-1.5 shadow-sm transition-all select-none hover:shadow-md ${
-                                      isSelected
-                                        ? 'border-indigo-500 ring-4 ring-indigo-500/20 scale-105 shadow-md'
-                                        : 'border-slate-200 hover:border-slate-300'
+                                    className={`relative aspect-square border-2 rounded-xl overflow-hidden bg-white p-1.5 shadow-sm transition-all select-none hover:shadow-md ${
+                                      isFeedbackActive
+                                        ? 'border-slate-200 opacity-50 cursor-default'
+                                        : isSelected
+                                          ? 'border-indigo-500 ring-4 ring-indigo-500/20 scale-105 shadow-md cursor-grab active:cursor-grabbing'
+                                          : 'border-slate-200 hover:border-slate-300 cursor-grab active:cursor-grabbing'
                                     }`}
-                                    title="Nhấp để chọn hoặc kéo thả sang trái"
+                                    title={isFeedbackActive ? undefined : "Nhấp để chọn hoặc kéo thả sang trái"}
                                   >
                                     <img 
                                       src={imgUrl} 
@@ -1458,7 +1795,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                       Ảnh {imgIdx + 1}
                                     </div>
 
-                                    {isSelected && (
+                                    {isSelected && !isFeedbackActive && (
                                       <div className="absolute inset-0 bg-indigo-500/10 flex items-center justify-center">
                                         <div className="bg-indigo-600 text-white text-[9px] font-black px-2 py-1 rounded-full shadow-sm animate-bounce">
                                           Đang chọn
@@ -1482,7 +1819,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                       </div>
 
                       {/* Reset Match option */}
-                      {currentAnswer.some((val: any) => val !== null) && (
+                      {currentAnswer.some((val: any) => val !== null) && !isFeedbackActive && (
                         <div className="flex justify-end pt-2">
                           <button
                             type="button"
@@ -1527,32 +1864,71 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                         <tbody className="divide-y divide-slate-100 bg-white">
                           {parsedAnswers.matrixRows.map((rowVal) => {
                             const selectedCol = (currentAnswer || {})[rowVal];
+                            let correctMap: Record<string, string> = {};
+                            try {
+                              correctMap = JSON.parse(currentQ.CorrectAnswer || '{}');
+                            } catch (e) {
+                              console.error(e);
+                            }
+                            const correctCol = correctMap[rowVal];
 
                             return (
                               <tr key={rowVal} className="hover:bg-slate-50/50 transition">
-                                <td className="p-3.5 border-r border-slate-200 text-xs font-semibold text-slate-700 leading-relaxed max-w-[320px] break-words">
+                                <td className={`p-3.5 border-r border-slate-200 text-xs font-semibold leading-relaxed max-w-[320px] break-words ${
+                                  isFeedbackActive
+                                    ? selectedCol === correctCol
+                                      ? 'text-green-800 bg-green-50/20'
+                                      : 'text-red-800 bg-red-50/20'
+                                    : 'text-slate-700'
+                                }`}>
                                   {rowVal}
+                                  {isFeedbackActive && selectedCol !== correctCol && (
+                                    <span className="block text-[10px] text-green-600 font-black mt-1">
+                                      ✓ Đúng: {correctCol}
+                                    </span>
+                                  )}
                                 </td>
                                 {parsedAnswers.matrixCols?.map((colVal) => {
                                   const isChecked = selectedCol === colVal;
+                                  const isCorrectCell = colVal === correctCol;
+
+                                  let buttonStyle = 'border-slate-400 bg-white';
+                                  let innerCircleStyle = 'bg-transparent scale-0';
+
+                                  if (isFeedbackActive) {
+                                    if (isCorrectCell) {
+                                      buttonStyle = 'border-green-500 bg-green-50 text-green-600';
+                                      innerCircleStyle = 'bg-green-600 scale-100';
+                                    } else if (isChecked) {
+                                      buttonStyle = 'border-red-500 bg-red-50 text-red-600';
+                                      innerCircleStyle = 'bg-red-600 scale-100';
+                                    } else {
+                                      buttonStyle = 'border-slate-200 bg-slate-50 opacity-40';
+                                      innerCircleStyle = 'bg-transparent scale-0';
+                                    }
+                                  } else {
+                                    if (isChecked) {
+                                      buttonStyle = 'border-[#0066cc] bg-[#e6f0fa]';
+                                      innerCircleStyle = 'bg-[#0066cc] scale-100';
+                                    }
+                                  }
 
                                   return (
                                     <td key={colVal} className="p-3 border-l border-slate-200 text-center">
                                       <button
                                         type="button"
+                                        disabled={isFeedbackActive}
                                         onClick={() => {
                                           const updated = { ...(currentAnswer || {}) };
                                           updated[rowVal] = colVal;
                                           handleSelectAnswer(currentQ.QuestionID, updated);
                                         }}
-                                        className="w-5 h-5 rounded-full border border-slate-400 bg-white flex items-center justify-center mx-auto transition-all cursor-pointer hover:border-[#0066cc] hover:scale-110 active:scale-95 shadow-sm"
+                                        className={`w-5 h-5 rounded-full border flex items-center justify-center mx-auto transition-all shadow-sm ${
+                                          isFeedbackActive ? 'cursor-default' : 'cursor-pointer hover:border-[#0066cc] hover:scale-110 active:scale-95'
+                                        } ${buttonStyle}`}
                                         title={`Chọn "${colVal}"`}
                                       >
-                                        <div 
-                                          className={`w-3 h-3 rounded-full transition-all ${
-                                            isChecked ? 'bg-[#0066cc] scale-100' : 'bg-transparent scale-0'
-                                          }`} 
-                                        />
+                                        <div className={`w-3 h-3 rounded-full transition-all ${innerCircleStyle}`} />
                                       </button>
                                     </td>
                                   );
