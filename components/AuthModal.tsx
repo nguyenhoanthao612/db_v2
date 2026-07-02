@@ -227,12 +227,10 @@ export default function AuthModal({ onLoginSuccess }: AuthModalProps) {
             <BookOpen className="w-7 h-7" />
           </div>
           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">
-            {isLogin ? 'Chào Bạn Nhé! 👋' : 'Gia Nhập Lớp Học ✨'}
+            Chào Bạn Nhé! 👋
           </h2>
           <p className="text-xs text-slate-400 font-bold mt-1 max-w-xs">
-            {isLogin
-              ? 'Đăng nhập ôn tập IC3 GS6 11 dạng bài học sinh'
-              : 'Tạo tài khoản ôn tập để ghi nhận bảng điểm lịch sử làm bài'}
+            Đăng nhập ôn tập IC3 GS6 11 dạng bài học sinh
           </p>
         </div>
 
@@ -379,7 +377,7 @@ export default function AuthModal({ onLoginSuccess }: AuthModalProps) {
                 >
                   <option value="">-- Chọn Trường --</option>
                   {schools.length === 0 ? (
-                    <option value="" disabled>Chưa có dữ liệu trường học. Vui lòng sang tab Đăng ký.</option>
+                    <option value="" disabled>Chưa có dữ liệu trường học. Vui lòng liên hệ Giáo viên/Quản trị viên.</option>
                   ) : (
                     schools.map((school) => (
                       <option key={school} value={school}>
@@ -483,26 +481,7 @@ export default function AuthModal({ onLoginSuccess }: AuthModalProps) {
           </button>
         </form>
 
-        {/* Footer toggles */}
-        {role === 'Student' && (
-          <div className="mt-6 text-center text-xs font-bold">
-            {isLogin ? (
-              <p className="text-slate-400">
-                Chưa có tài khoản?{' '}
-                <button onClick={() => setIsLogin(false)} className="text-blue-500 hover:underline font-extrabold">
-                  Đăng ký học sinh mới
-                </button>
-              </p>
-            ) : (
-              <p className="text-slate-400">
-                Đã có tài khoản?{' '}
-                <button onClick={() => setIsLogin(true)} className="text-blue-500 hover:underline font-extrabold">
-                  Về màn hình Đăng nhập
-                </button>
-              </p>
-            )}
-          </div>
-        )}
+        {/* Registration is closed by request */}
       </div>
     </div>
   );

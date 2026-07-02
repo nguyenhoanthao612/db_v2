@@ -28,6 +28,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackIsCorrect, setFeedbackIsCorrect] = useState(false);
+  const [submittedQuestions, setSubmittedQuestions] = useState<Record<string, { isCorrect: boolean }>>({});
 
   // Draggable feedback modal state
   const [feedbackModalPos, setFeedbackModalPos] = useState({ x: 0, y: 0 });
@@ -439,6 +440,11 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     setFeedbackIsCorrect(isCorrect);
     setShowFeedbackModal(true);
 
+    setSubmittedQuestions((prev) => ({
+      ...prev,
+      [q.QuestionID]: { isCorrect }
+    }));
+
     if (mode === 'race' && !isCorrect) {
       // Save current progress to history before resetting
       const scorePct = questions.length > 0 ? Math.round((currentIdx / questions.length) * 100) : 0;
@@ -489,6 +495,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
         }
       });
       setAnswersState(initialAnswers);
+      setSubmittedQuestions({});
       return;
     }
 
@@ -496,6 +503,8 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     if (mode === 'training') {
       if (currentIdx < questions.length - 1) {
         setCurrentIdx((prev) => prev + 1);
+      } else {
+        handleFinish();
       }
       return;
     }
@@ -536,7 +545,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   const currentQ = questions[currentIdx];
   const currentAnswer = answersState[currentQ.QuestionID];
   const parsedAnswers: QuestionAnswers = JSON.parse(currentQ.Answers);
-  const isFeedbackActive = showFeedbackModal;
+  const isFeedbackActive = showFeedbackModal || ((mode === 'training' || mode === 'race') && !!submittedQuestions[currentQ.QuestionID]);
 
   const isCurrentAnswered = (() => {
     if (currentAnswer === null || currentAnswer === undefined) return false;
@@ -1980,34 +1989,99 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                 </>
               ) : mode === 'training' ? (
                 <>
-                  {/* Empty spacer so the Nộp câu trả lời button resides on the right side (where Next button used to be) */}
-                  <div />
-                  <button
-                    disabled={!isCurrentAnswered}
-                    onClick={handleSubmitQuestion}
-                    className={`px-6 py-2.5 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md transition-all select-none ${
-                      !isCurrentAnswered
-                        ? 'bg-slate-300 shadow-none cursor-not-allowed'
-                        : 'bg-blue-500 hover:bg-blue-600 shadow-blue-100 cursor-pointer'
-                    }`}
-                  >
-                    <Check className="w-4 h-4" /> Nộp câu trả lời
-                  </button>
+                  {submittedQuestions[currentQ.QuestionID] ? (
+                    <>
+                      <button
+                        disabled={currentIdx === 0}
+                        onClick={handlePrev}
+                        className="px-4 py-2.5 bg-slate-100 border border-slate-200 disabled:opacity-40 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer select-none"
+                      >
+                        <ArrowLeft className="w-4 h-4" /> Câu trước
+                      </button>
+
+                      {currentIdx < questions.length - 1 ? (
+                        <button
+                          onClick={handleNext}
+                          className="px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer select-none"
+                        >
+                          Câu tiếp theo <ArrowRight className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <button
+                          disabled={hasUnanswered}
+                          onClick={handleFinish}
+                          className={`px-6 py-2.5 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md transition-all select-none ${
+                            hasUnanswered
+                              ? 'bg-slate-300 shadow-none cursor-not-allowed'
+                              : 'bg-green-500 hover:bg-green-600 shadow-green-100 cursor-pointer'
+                          }`}
+                        >
+                          <Save className="w-4 h-4" /> Hoàn thành bài học
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        disabled={currentIdx === 0}
+                        onClick={handlePrev}
+                        className="px-4 py-2.5 bg-slate-100 border border-slate-200 disabled:opacity-40 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer select-none"
+                      >
+                        <ArrowLeft className="w-4 h-4" /> Câu trước
+                      </button>
+                      <button
+                        disabled={!isCurrentAnswered}
+                        onClick={handleSubmitQuestion}
+                        className={`px-6 py-2.5 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md transition-all select-none ${
+                          !isCurrentAnswered
+                            ? 'bg-slate-300 shadow-none cursor-not-allowed'
+                            : 'bg-blue-500 hover:bg-blue-600 shadow-blue-100 cursor-pointer'
+                        }`}
+                      >
+                        <Check className="w-4 h-4" /> Nộp câu trả lời
+                      </button>
+                    </>
+                  )}
                 </>
               ) : (
                 /* Race mode */
                 <div className="w-full">
-                  <button
-                    disabled={!isCurrentAnswered}
-                    onClick={handleSubmitQuestion}
-                    className={`w-full py-3.5 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md transition-all select-none ${
-                      !isCurrentAnswered
-                        ? 'bg-slate-300 shadow-none cursor-not-allowed'
-                        : 'bg-blue-500 hover:bg-blue-600 shadow-blue-100 cursor-pointer'
-                    }`}
-                  >
-                    <Check className="w-4 h-4" /> Nộp câu trả lời
-                  </button>
+                  {submittedQuestions[currentQ.QuestionID] ? (
+                    <div className="flex gap-4">
+                      {currentIdx < questions.length - 1 ? (
+                        <button
+                          onClick={handleNext}
+                          className="w-full py-3.5 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md transition-all select-none cursor-pointer"
+                        >
+                          Câu tiếp theo <ArrowRight className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <button
+                          disabled={hasUnanswered}
+                          onClick={handleFinish}
+                          className={`w-full py-3.5 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md transition-all select-none ${
+                            hasUnanswered
+                              ? 'bg-slate-300 shadow-none cursor-not-allowed'
+                              : 'bg-green-500 hover:bg-green-600 shadow-green-100 cursor-pointer'
+                          }`}
+                        >
+                          <Save className="w-4 h-4" /> Nộp bài và hoàn tất
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      disabled={!isCurrentAnswered}
+                      onClick={handleSubmitQuestion}
+                      className={`w-full py-3.5 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md transition-all select-none ${
+                        !isCurrentAnswered
+                          ? 'bg-slate-300 shadow-none cursor-not-allowed'
+                          : 'bg-blue-500 hover:bg-blue-600 shadow-blue-100 cursor-pointer'
+                      }`}
+                    >
+                      <Check className="w-4 h-4" /> Nộp câu trả lời
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -2368,7 +2442,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
               >
                 {mode === 'race' && !feedbackIsCorrect 
                   ? 'Làm lại từ đầu' 
-                  : mode === 'training' 
+                  : mode === 'training' || (mode === 'race' && currentIdx === questions.length - 1)
                   ? 'Xác nhận' 
                   : currentIdx < questions.length - 1 
                   ? 'Câu tiếp theo' 
