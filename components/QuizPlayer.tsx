@@ -29,6 +29,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackIsCorrect, setFeedbackIsCorrect] = useState(false);
   const [submittedQuestions, setSubmittedQuestions] = useState<Record<string, { isCorrect: boolean }>>({});
+  const [isReviewMode, setIsReviewMode] = useState(false);
 
   // State reference for keyboard keydown event handlers
   const keyHandlerStateRef = useRef<any>(null);
@@ -37,6 +38,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     keyHandlerStateRef.current = {
       loading,
       quizFinished,
+      isReviewMode,
       questions,
       showFeedbackModal,
       mode,
@@ -56,7 +58,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
       if (e.key !== 'Enter') return;
       
       const state = keyHandlerStateRef.current;
-      if (!state || state.loading || state.quizFinished || state.questions.length === 0) return;
+      if (!state || state.loading || (state.quizFinished && !state.isReviewMode) || state.questions.length === 0) return;
 
       // Prevent default browser behavior for Enter
       e.preventDefault();
@@ -64,6 +66,13 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
       // If feedback modal is active, Enter key acts as the close/next feedback button
       if (state.showFeedbackModal) {
         state.handleFeedbackNext();
+        return;
+      }
+
+      if (state.isReviewMode) {
+        if (state.currentIdx < state.questions.length - 1) {
+          state.handleNext();
+        }
         return;
       }
 
@@ -740,7 +749,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   const currentQ = questions[currentIdx];
   const currentAnswer = answersState[currentQ.QuestionID];
   const parsedAnswers: QuestionAnswers = JSON.parse(currentQ.Answers);
-  const isFeedbackActive = showFeedbackModal || ((mode === 'training' || mode === 'race') && !!submittedQuestions[currentQ.QuestionID]);
+  const isFeedbackActive = isReviewMode || showFeedbackModal || ((mode === 'training' || mode === 'race') && !!submittedQuestions[currentQ.QuestionID]);
 
   const isCurrentAnswered = (() => {
     if (currentAnswer === null || currentAnswer === undefined) return false;
@@ -773,7 +782,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
   return (
     <div id="quiz-player" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {!quizFinished ? (
+      {!quizFinished || isReviewMode ? (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* LEFT AREA: QUESTION BOX & INTERACTIVE ANSWER TYPES (SPANNING 3 COLUMNS) */}
           <div className="lg:col-span-3 space-y-6">
@@ -781,15 +790,15 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
             <div className="flex justify-between items-center bg-white border border-blue-100/60 p-4 rounded-2xl shadow-sm">
               <div className="flex items-center gap-2">
                 <span className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-white rounded-lg ${
-                  mode === 'training' ? 'bg-blue-500' : mode === 'testing' ? 'bg-[#0066cc]' : 'bg-amber-500 animate-pulse'
+                  isReviewMode ? 'bg-indigo-600' : mode === 'training' ? 'bg-blue-500' : mode === 'testing' ? 'bg-[#0066cc]' : 'bg-amber-500 animate-pulse'
                 }`}>
-                  {mode === 'training' ? 'Training' : mode === 'testing' ? 'Testing' : 'Race'}
+                  {isReviewMode ? 'Xem lại' : mode === 'training' ? 'Training' : mode === 'testing' ? 'Testing' : 'Race'}
                 </span>
                 <button
-                  onClick={onBack}
+                  onClick={isReviewMode ? () => setIsReviewMode(false) : onBack}
                   className="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-xs font-bold transition cursor-pointer"
                 >
-                  <ArrowLeft className="w-4 h-4" /> Thoát làm bài
+                  <ArrowLeft className="w-4 h-4" /> {isReviewMode ? 'Quay lại kết quả' : 'Thoát làm bài'}
                 </button>
               </div>
 
@@ -798,7 +807,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                   Câu hỏi {currentIdx + 1} / {questions.length}
                 </span>
                 <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-black rounded-lg border border-blue-100/40 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 animate-pulse" /> {formatTimer(timer)}
+                  <Clock className={`w-3.5 h-3.5 ${isReviewMode ? 'text-blue-500' : 'animate-pulse'}`} /> {formatTimer(isReviewMode ? (scoreRecord?.Time || timer) : timer)}
                 </span>
               </div>
             </div>
@@ -2172,11 +2181,48 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                   </div>
                 )}
               </div>
+              
+              {isReviewMode && currentQ.Explanation && (
+                <div className="mt-6 bg-blue-50/50 border border-blue-100 rounded-2xl p-4 text-[11px] sm:text-xs leading-relaxed text-blue-800">
+                  <p className="font-extrabold flex items-center gap-1.5 text-xs mb-1">
+                    <HelpCircle className="w-4 h-4 text-blue-500" /> Giải thích chi tiết câu hỏi:
+                  </p>
+                  {currentQ.Explanation}
+                </div>
+              )}
             </div>
 
             {/* Pagination controls */}
             <div className="flex justify-between items-center gap-4">
-              {mode === 'testing' ? (
+              {isReviewMode ? (
+                <>
+                  <button
+                    disabled={currentIdx === 0}
+                    onClick={handlePrev}
+                    className="px-4 py-2.5 bg-slate-100 border border-slate-200 disabled:opacity-40 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer select-none"
+                  >
+                    <ArrowLeft className="w-4 h-4" /> Câu trước
+                  </button>
+
+                  <button
+                    onClick={() => setIsReviewMode(false)}
+                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition-all select-none cursor-pointer"
+                  >
+                    Quay lại bảng kết quả
+                  </button>
+
+                  {currentIdx < questions.length - 1 ? (
+                    <button
+                      onClick={handleNext}
+                      className="px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer select-none"
+                    >
+                      Câu tiếp theo <ArrowRight className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <div className="w-[100px]" />
+                  )}
+                </>
+              ) : mode === 'testing' ? (
                 <>
                   <button
                     disabled={currentIdx === 0}
@@ -2339,15 +2385,21 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                   <button
                     key={q.QuestionID}
                     onClick={() => {
-                      if (mode === 'testing' || mode === 'training') {
+                      if (mode === 'testing' || mode === 'training' || isReviewMode) {
                         setCurrentIdx(idx);
                       }
                     }}
-                    disabled={mode !== 'testing' && mode !== 'training'}
+                    disabled={mode !== 'testing' && mode !== 'training' && !isReviewMode}
                     className={`h-9 w-full rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1 relative ${
-                      (mode === 'testing' || mode === 'training') ? 'cursor-pointer' : 'cursor-default'
+                      (mode === 'testing' || mode === 'training' || isReviewMode) ? 'cursor-pointer' : 'cursor-default'
                     } ${
-                      isSelected
+                      isReviewMode
+                        ? isSelected
+                          ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-300 ring-offset-2'
+                          : gradeQuestion(q, answersState[q.QuestionID])
+                          ? 'bg-green-100 border border-green-300 text-green-700 font-black hover:bg-green-200'
+                          : 'bg-red-100 border border-red-300 text-red-700 font-black hover:bg-red-200'
+                        : isSelected
                         ? 'bg-blue-500 text-white shadow-md shadow-blue-200'
                         : isAnswered
                         ? isFlagged
@@ -2367,51 +2419,77 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
               })}
             </div>
 
-            <div className="pt-4 border-t border-slate-100 space-y-2 text-[10px] font-bold text-slate-400">
-              <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded-md bg-blue-500 shrink-0" />
-                <span>Đang chọn</span>
+            {isReviewMode ? (
+              <div className="pt-4 border-t border-slate-100 space-y-2 text-[10px] font-bold text-slate-400">
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-md bg-blue-600 ring-2 ring-blue-300 ring-offset-1 shrink-0" />
+                  <span>Đang chọn</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-md bg-green-100 border border-green-300 shrink-0" />
+                  <span>Trả lời đúng</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-md bg-red-100 border border-red-300 shrink-0" />
+                  <span>Trả lời sai</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded-md bg-blue-50 text-blue-600 border border-blue-100 shrink-0" />
-                <span>Đã làm</span>
+            ) : (
+              <div className="pt-4 border-t border-slate-100 space-y-2 text-[10px] font-bold text-slate-400">
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-md bg-blue-500 shrink-0" />
+                  <span>Đang chọn</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-md bg-blue-50 text-blue-600 border border-blue-100 shrink-0" />
+                  <span>Đã làm</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-md bg-slate-100 shrink-0" />
+                  <span>Chưa làm</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-md bg-amber-50 text-amber-600 border border-amber-300 flex items-center justify-center shrink-0">
+                    <Flag className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                  </span>
+                  <span>Đã gắn cờ</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded-md bg-slate-100 shrink-0" />
-                <span>Chưa làm</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded-md bg-amber-50 text-amber-600 border border-amber-300 flex items-center justify-center shrink-0">
-                  <Flag className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
-                </span>
-                <span>Đã gắn cờ</span>
-              </div>
-            </div>
+            )}
 
-            {(mode === 'testing' || mode === 'training') && (
+            {isReviewMode ? (
               <button
-                disabled={hasUnanswered}
-                onClick={handleFinish}
-                className={`w-full py-3 text-white text-xs font-extrabold rounded-xl shadow-md transition-all select-none ${
-                  hasUnanswered
-                    ? 'bg-slate-300 shadow-none cursor-not-allowed'
-                    : 'bg-green-500 hover:bg-green-600 shadow-green-100 cursor-pointer'
-                }`}
-                title={
-                  hasUnanswered 
-                    ? 'Vui lòng chọn đáp án cho tất cả câu hỏi trước khi hoàn tất' 
+                onClick={() => setIsReviewMode(false)}
+                className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold rounded-xl shadow-md transition-all select-none cursor-pointer"
+              >
+                Quay lại bảng kết quả
+              </button>
+            ) : (
+              (mode === 'testing' || mode === 'training') && (
+                <button
+                  disabled={hasUnanswered}
+                  onClick={handleFinish}
+                  className={`w-full py-3 text-white text-xs font-extrabold rounded-xl shadow-md transition-all select-none ${
+                    hasUnanswered
+                      ? 'bg-slate-300 shadow-none cursor-not-allowed'
+                      : 'bg-green-500 hover:bg-green-600 shadow-green-100 cursor-pointer'
+                  }`}
+                  title={
+                    hasUnanswered 
+                      ? 'Vui lòng chọn đáp án cho tất cả câu hỏi trước khi hoàn tất' 
+                      : mode === 'testing' 
+                      ? 'Nộp bài ngay' 
+                      : 'Hoàn thành bài học'
+                  }
+                >
+                  {hasUnanswered 
+                    ? 'Chưa hoàn thành tất cả' 
                     : mode === 'testing' 
                     ? 'Nộp bài ngay' 
                     : 'Hoàn thành bài học'
-                }
-              >
-                {hasUnanswered 
-                  ? 'Chưa hoàn thành tất cả' 
-                  : mode === 'testing' 
-                  ? 'Nộp bài ngay' 
-                  : 'Hoàn thành bài học'
-                }
-              </button>
+                  }
+                </button>
+              )
             )}
           </div>
         </div>
@@ -2452,146 +2530,27 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                 </div>
               </div>
 
-              <div className="pt-3">
+              <div className="pt-3 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button
                   onClick={onBack}
-                  className="px-6 py-2.5 bg-white text-blue-600 hover:bg-slate-50 text-xs font-extrabold rounded-xl shadow-md transition cursor-pointer select-none"
+                  className="w-full sm:w-auto px-6 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-extrabold rounded-xl shadow-md transition cursor-pointer select-none"
                 >
                   Quay lại trang chính
+                </button>
+                <button
+                  onClick={() => {
+                    setCurrentIdx(0);
+                    setIsReviewMode(true);
+                  }}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-slate-900 text-xs font-extrabold rounded-xl shadow-md transition cursor-pointer select-none flex items-center justify-center gap-1.5"
+                >
+                  <RefreshCw className="w-4 h-4 animate-spin-slow" /> Xem lại đáp án chi tiết
                 </button>
               </div>
             </div>
           </div>
 
-          {/* DETAILED QUESTIONS REVIEW */}
-          <div className="space-y-6">
-            <h3 className="text-lg font-extrabold text-slate-800">Xem Lại Đáp Án Chi Tiết</h3>
 
-            <div className="space-y-6">
-              {questions.map((q, idx) => {
-                const studentAns = answersState[q.QuestionID];
-                const isCorrect = gradeQuestion(q, studentAns);
-                const answersParsed: QuestionAnswers = JSON.parse(q.Answers);
-
-                return (
-                  <div
-                    key={q.QuestionID}
-                    className={`bg-white border rounded-2xl p-5 sm:p-6 shadow-sm relative overflow-hidden ${
-                      isCorrect ? 'border-green-100 bg-green-50/10' : 'border-red-100 bg-red-50/10'
-                    }`}
-                  >
-                    <div className="absolute right-4 top-4">
-                      {isCorrect ? (
-                        <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[10px] font-black px-2.5 py-1 rounded-full">
-                          <Check className="w-3.5 h-3.5" /> CHÍNH XÁC
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 text-[10px] font-black px-2.5 py-1 rounded-full">
-                          <X className="w-3.5 h-3.5" /> CHƯA ĐÚNG
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="space-y-3.5 max-w-[85%]">
-                      <span className="text-[10px] font-bold text-slate-400">CÂU HỎI {idx + 1}</span>
-                      <h4 className="text-sm sm:text-base font-extrabold text-slate-800 leading-relaxed">
-                        {q.QuestionContent}
-                      </h4>
-
-                      {/* Display Student Answers comparison based on Question Types */}
-                      <div className="text-xs space-y-2 bg-slate-50 border border-slate-100 rounded-xl p-3">
-                        <div>
-                          <span className="text-slate-400 font-bold block mb-0.5">Lựa chọn của bạn:</span>
-                          <span className="font-extrabold text-slate-700 leading-relaxed">
-                            {studentAns === null || studentAns === undefined ? (
-                              <em className="text-red-400">Bỏ trống câu hỏi này</em>
-                            ) : q.QuestionType === 'Multiple Choice' || q.QuestionType === 'Video Based' ? (
-                              answersParsed.options?.[Number(studentAns)] || studentAns
-                            ) : q.QuestionType === 'Multiple Response' ? (
-                              (studentAns as number[]).map((i) => answersParsed.options?.[i]).join(', ')
-                            ) : q.QuestionType === 'True / False' ? (
-                              studentAns
-                            ) : q.QuestionType === 'Matching' ? (
-                              Object.entries(studentAns as Record<string, string>)
-                                .map(([k, v]) => `[${k} ➔ ${v}]`)
-                                .join(', ')
-                            ) : q.QuestionType === 'Sequence Ordering' ? (
-                              (studentAns as string[]).join(' ➔ ')
-                            ) : q.QuestionType === 'True/False Multiple' || q.QuestionType === 'Categorization' || q.QuestionType === 'Matrix Selection' ? (
-                              Object.entries(studentAns as Record<string, string>)
-                                .map(([k, v]) => `[${k}: ${v}]`)
-                                .join(', ')
-                            ) : q.QuestionType === 'Hotspot' ? (
-                              Array.isArray(studentAns)
-                                ? `Đã đặt ${studentAns.length} vị trí chấm trên hình ảnh`
-                                : (answersParsed.hotspots?.find((s) => s.id === studentAns)?.name || studentAns)
-                            ) : q.QuestionType?.toLowerCase() === 'match image to text' ? (
-                              (studentAns as number[])
-                                .map((tIdx, i) => `[Ảnh ${i + 1} ➔ ${tIdx !== null ? answersParsed.textTargets?.[tIdx] : 'Chưa gán'}]`)
-                                .join(', ')
-                            ) : (
-                              JSON.stringify(studentAns)
-                            )}
-                          </span>
-                        </div>
-
-                        <div className="pt-2 border-t border-slate-200/60">
-                          <span className="text-slate-400 font-bold block mb-0.5">Đáp án chính xác:</span>
-                          <span className="font-extrabold text-green-600 leading-relaxed">
-                            {q.QuestionType === 'Multiple Choice' || q.QuestionType === 'Video Based' ? (
-                              answersParsed.options?.[Number(q.CorrectAnswer)] || q.CorrectAnswer
-                            ) : q.QuestionType === 'Multiple Response' ? (
-                              JSON.parse(q.CorrectAnswer)
-                                .map((i: number) => answersParsed.options?.[i])
-                                .join(', ')
-                            ) : q.QuestionType === 'True / False' ? (
-                              q.CorrectAnswer
-                            ) : q.QuestionType === 'Matching' ? (
-                              Object.entries(JSON.parse(q.CorrectAnswer) as Record<string, string>)
-                                .map(([k, v]) => `[${k} ➔ ${v}]`)
-                                .join(', ')
-                            ) : q.QuestionType === 'Sequence Ordering' ? (
-                              JSON.parse(q.CorrectAnswer)
-                                .map((idx: number) => answersParsed.sequenceItems?.[idx])
-                                .join(' ➔ ')
-                            ) : q.QuestionType === 'True/False Multiple' ? (
-                              Object.entries(JSON.parse(q.CorrectAnswer) as Record<string, boolean>)
-                                .map(([k, v], i) => `[${answersParsed.statements?.[i]}: ${v ? 'Đúng' : 'Sai'}]`)
-                                .join(', ')
-                            ) : q.QuestionType === 'Categorization' || q.QuestionType === 'Matrix Selection' ? (
-                              Object.entries(JSON.parse(q.CorrectAnswer) as Record<string, string>)
-                                .map(([k, v]) => `[${k}: ${v}]`)
-                                .join(', ')
-                            ) : q.QuestionType === 'Hotspot' ? (
-                              answersParsed.hotspots
-                                ? `Yêu cầu xác định ${answersParsed.hotspots.length} vùng: [${answersParsed.hotspots.map((s: any) => s.name || s.id).join(', ')}]`
-                                : q.CorrectAnswer
-                            ) : q.QuestionType?.toLowerCase() === 'match image to text' ? (
-                              JSON.parse(q.CorrectAnswer)
-                                .map((tIdx: number, i: number) => `[Ảnh ${i + 1} ➔ ${answersParsed.textTargets?.[tIdx]}]`)
-                                .join(', ')
-                            ) : (
-                              q.CorrectAnswer
-                            )}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Explanation info block */}
-                      {q.Explanation && (
-                        <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-3 text-[11px] leading-relaxed text-blue-800">
-                          <p className="font-extrabold flex items-center gap-1 text-xs mb-1">
-                            <HelpCircle className="w-4 h-4 text-blue-500" /> Giải thích chi tiết câu hỏi:
-                          </p>
-                          {q.Explanation}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
         </div>
       )}
 
