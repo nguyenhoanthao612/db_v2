@@ -7,7 +7,7 @@ import { Users, BookOpen, HelpCircle, Activity, CheckCircle, Check, FileSpreadsh
 
 export default function ReportsPage() {
   const { syncTrigger } = useAdmin();
-  const [loadingStats, setLoadingStats] = useState(true);
+  const [loadingStats, setLoadingStats] = useState(false);
   const [stats, setStats] = useState({
     totalStudents: 0,
     totalExams: 0,
@@ -17,10 +17,42 @@ export default function ReportsPage() {
     accuracyRate: 0,
   });
 
-  const loadStats = async () => {
-    if (stats.totalStudents === 0 && stats.totalExams === 0) {
-      setLoadingStats(true);
+  useEffect(() => {
+    // SSR safe initial local cache load
+    if (typeof window !== 'undefined') {
+      try {
+        const studentsStr = localStorage.getItem('ic3_students');
+        const examsStr = localStorage.getItem('ic3_exams');
+        const questionsStr = localStorage.getItem('ic3_questions');
+        const scoresStr = localStorage.getItem('ic3_scores');
+
+        const students = studentsStr ? JSON.parse(studentsStr) : [];
+        const exams = examsStr ? JSON.parse(examsStr) : [];
+        const questions = questionsStr ? JSON.parse(questionsStr) : [];
+        const scores = scoresStr ? JSON.parse(scoresStr) : [];
+
+        const totalCorrect = scores.reduce((acc: number, s: any) => acc + Number(s.Correct || 0), 0);
+        const totalWrong = scores.reduce((acc: number, s: any) => acc + Number(s.Wrong || 0), 0);
+        const totalAnswers = totalCorrect + totalWrong;
+        const accuracy = totalAnswers > 0 ? Math.round((totalCorrect / totalAnswers) * 100) : 0;
+        const avgScoreVal = scores.length > 0 ? Math.round(scores.reduce((acc: number, s: any) => acc + Number(s.Score || 0), 0) / scores.length) : 0;
+
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setStats({
+          totalStudents: students.length,
+          totalExams: exams.length,
+          totalQuestions: questions.length,
+          totalSubmissions: scores.length,
+          avgScore: avgScoreVal,
+          accuracyRate: accuracy,
+        });
+      } catch (err) {
+        console.error('Failed to parse cached stats', err);
+      }
     }
+  }, []);
+
+  const loadStats = async () => {
     try {
       const [studentsData, allExams, questionsData, scores] = await Promise.all([
         DatabaseService.getStudents(),

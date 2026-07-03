@@ -15,16 +15,35 @@ interface StudentDashboardProps {
 export default function StudentDashboard({ student, onSelectExam, syncTrigger }: StudentDashboardProps) {
   const [exams, setExams] = useState<Exam[]>([]);
   const [scores, setScores] = useState<ScoreRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Default to false since we load instantly from cache
   const [selectedLevel, setSelectedLevel] = useState<'LV1' | 'LV2' | 'LV3' | 'ALL'>('ALL');
   const [selectedExamForMode, setSelectedExamForMode] = useState<Exam | null>(null);
   const [activeModeSelection, setActiveModeSelection] = useState<'training' | 'testing' | 'race'>('training');
 
   useEffect(() => {
-    async function loadData() {
-      if (exams.length === 0 && scores.length === 0) {
-        setLoading(true);
+    // SSR safe initial local cache load
+    if (typeof window !== 'undefined') {
+      const storedExams = localStorage.getItem('ic3_exams');
+      const storedScores = localStorage.getItem('ic3_scores');
+      if (storedExams) {
+        try {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setExams(JSON.parse(storedExams));
+        } catch (e) { console.error(e); }
       }
+      if (storedScores) {
+        try {
+          const parsedScores = JSON.parse(storedScores);
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setScores(parsedScores.filter((s: any) => s.StudentID === student.StudentID));
+        } catch (e) { console.error(e); }
+      }
+    }
+  }, [student.StudentID]);
+
+  useEffect(() => {
+    async function loadData() {
+      // Quiet background refresh - no full screen blocking loading spinner!
       try {
         const [loadedExams, loadedScores] = await Promise.all([
           DatabaseService.getExams(),
@@ -34,8 +53,6 @@ export default function StudentDashboard({ student, onSelectExam, syncTrigger }:
         setScores(loadedScores);
       } catch (e) {
         console.error('Error loading student dashboard', e);
-      } finally {
-        setLoading(false);
       }
     }
     loadData();

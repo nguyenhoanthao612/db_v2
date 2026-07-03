@@ -130,6 +130,117 @@ export class DatabaseService {
     }
   }
 
+  // Pull login data (Student, Admin) from Google Sheets and update local state in background
+  public static async pullLoginData(): Promise<{ success: boolean; message: string }> {
+    const config = this.getSyncConfig();
+    if (!config.appsScriptUrl) {
+      return { success: false, message: 'Chưa cấu hình URL Google Sheets.' };
+    }
+
+    try {
+      const [studentsRes, adminRes] = await Promise.all([
+        this.callAppsScript('getTable', { table: 'Student' }).catch((e) => {
+          console.error('Error fetching Student table in background', e);
+          return null;
+        }),
+        this.callAppsScript('getTable', { table: 'Admin' }).catch((e) => {
+          console.error('Error fetching Admin table in background', e);
+          return null;
+        }),
+      ]);
+
+      if (studentsRes && studentsRes.success && studentsRes.data) {
+        setLocalStorage(this.KEY_STUDENTS, studentsRes.data);
+      }
+      if (adminRes && adminRes.success && adminRes.data) {
+        setLocalStorage(this.KEY_ADMINS, adminRes.data);
+      }
+
+      return { success: true, message: 'Đồng bộ dữ liệu tài khoản thành công!' };
+    } catch (error: any) {
+      console.error('Pull login data failed', error);
+      return { success: false, message: `Thất bại: ${error.message || error}` };
+    }
+  }
+
+  // Pull dashboard data (Exams, Scores) from Google Sheets and update local state in background
+  public static async pullDashboardData(): Promise<{ success: boolean; message: string }> {
+    const config = this.getSyncConfig();
+    if (!config.appsScriptUrl) {
+      return { success: false, message: 'Chưa cấu hình URL Google Sheets.' };
+    }
+
+    try {
+      const [examRes, scoresRes] = await Promise.all([
+        this.callAppsScript('getExams').catch((e) => {
+          console.error('Error fetching Exams list in background', e);
+          return null;
+        }),
+        this.callAppsScript('getTable', { table: 'Score' }).catch((e) => {
+          console.error('Error fetching Score table in background', e);
+          return null;
+        }),
+      ]);
+
+      if (examRes && examRes.success && examRes.data) {
+        const localExams = getLocalStorage<Exam[]>(this.KEY_EXAMS, initialExams);
+        const mergedExams = examRes.data.map((incoming: any) => {
+          const match = localExams.find((e) => e.ExamID === incoming.ExamID && e.Level === incoming.Level);
+          return {
+            ...incoming,
+            Duration: match && match.Duration !== undefined ? match.Duration : incoming.Duration,
+          };
+        });
+        setLocalStorage(this.KEY_EXAMS, mergedExams);
+      }
+
+      if (scoresRes && scoresRes.success && scoresRes.data) {
+        const formattedScores = scoresRes.data.map((s: any) => ({
+          ...s,
+          Score: Number(s.Score),
+          Correct: Number(s.Correct),
+          Wrong: Number(s.Wrong),
+          Time: Number(s.Time),
+        }));
+        setLocalStorage(this.KEY_SCORES, formattedScores);
+      }
+
+      return { success: true, message: 'Đồng bộ dữ liệu đề thi và điểm số thành công!' };
+    } catch (error: any) {
+      console.error('Pull dashboard data failed', error);
+      return { success: false, message: `Thất bại: ${error.message || error}` };
+    }
+  }
+
+  // Pull questions data (Questions) from Google Sheets and update local state in background
+  public static async pullQuestionsData(): Promise<{ success: boolean; message: string }> {
+    const config = this.getSyncConfig();
+    if (!config.appsScriptUrl) {
+      return { success: false, message: 'Chưa cấu hình URL Google Sheets.' };
+    }
+
+    try {
+      const questionsRes = await this.callAppsScript('getTable', { table: 'Questions' }).catch((e) => {
+        console.error('Error fetching Questions table in background', e);
+        return null;
+      });
+
+      if (questionsRes && questionsRes.success && questionsRes.data) {
+        const formattedQuestions = questionsRes.data.map((q: any) => ({
+          ...q,
+          Score: Number(q.Score || 10),
+        }));
+        setLocalStorage(this.KEY_QUESTIONS, formattedQuestions);
+        return { success: true, message: 'Đồng bộ ngân hàng câu hỏi thành công!' };
+      }
+
+      return { success: false, message: 'Không lấy được ngân hàng câu hỏi hoặc dữ liệu trống.' };
+    } catch (error: any) {
+      console.error('Pull questions data failed', error);
+      return { success: false, message: `Thất bại: ${error.message || error}` };
+    }
+  }
+
   // Pull all data from Google Sheets and overwrite local state
   public static async pullFromGoogleSheets(): Promise<{ success: boolean; message: string }> {
     const config = this.getSyncConfig();
@@ -225,29 +336,16 @@ export class DatabaseService {
   }
 
   // Authenticate user (Supports both Google Sheets API and local fallback)
+  // Local-first optimization: authenticates in 0ms if cached, with seamless online fallback
   public static async login(
     username: string, 
     password: string, 
     role: 'Admin' | 'Student',
     studentDetails?: { schoolName: string; classGroup: string; fullName: string }
   ): Promise<{ success: boolean; user?: any; message?: string }> {
-    const config = this.getSyncConfig();
-    if (config.appsScriptUrl) {
-      try {
-        const params: Record<string, string> = { username, password, role };
-        if (role === 'Student' && studentDetails) {
-          params.schoolName = studentDetails.schoolName;
-          params.classGroup = studentDetails.classGroup;
-          params.fullName = studentDetails.fullName;
-        }
-        const res = await this.callAppsScript('login', params);
-        return res;
-      } catch (e) {
-        console.warn('Apps Script login failed, falling back to local storage', e);
-      }
-    }
+    this.initLocalStorage();
 
-    // Local Fallback
+    // 1. LOCAL-FIRST CHECK (0ms instant check)
     if (role === 'Admin') {
       const admins = getLocalStorage<Admin[]>(this.KEY_ADMINS, initialAdmins);
       const admin = admins.find(a => 
@@ -255,6 +353,7 @@ export class DatabaseService {
         String(a.Password).trim() === String(password).trim()
       );
       if (admin) {
+        console.log('Instant local-first login succeeded for Admin:', username);
         return { success: true, user: admin };
       }
     } else {
@@ -267,6 +366,7 @@ export class DatabaseService {
           String(s.Password).trim() === String(password).trim()
         );
         if (student) {
+          console.log('Instant local-first login succeeded for Student via dropdown:', studentDetails.fullName);
           return { success: true, user: student };
         }
       } else {
@@ -275,10 +375,47 @@ export class DatabaseService {
           String(s.Password).trim() === String(password).trim()
         );
         if (student) {
+          console.log('Instant local-first login succeeded for Student:', username);
           return { success: true, user: student };
         }
       }
     }
+
+    // 2. REMOTE FALLBACK (only if local check fails)
+    const config = this.getSyncConfig();
+    if (config.appsScriptUrl) {
+      console.log('Local check failed or user not synced yet. Trying remote fallback authentication...');
+      try {
+        const params: Record<string, string> = { username, password, role };
+        if (role === 'Student' && studentDetails) {
+          params.schoolName = studentDetails.schoolName;
+          params.classGroup = studentDetails.classGroup;
+          params.fullName = studentDetails.fullName;
+        }
+        const res = await this.callAppsScript('login', params);
+        
+        // Optimistic saving of the newly found remote user to local storage for future instant logins
+        if (res.success && res.user) {
+          if (role === 'Admin') {
+            const admins = getLocalStorage<Admin[]>(this.KEY_ADMINS, initialAdmins);
+            if (!admins.some(a => a.Username === res.user.Username)) {
+              admins.push(res.user);
+              setLocalStorage(this.KEY_ADMINS, admins);
+            }
+          } else {
+            const students = getLocalStorage<Student[]>(this.KEY_STUDENTS, initialStudents);
+            if (!students.some(s => s.StudentID === res.user.StudentID)) {
+              students.push(res.user);
+              setLocalStorage(this.KEY_STUDENTS, students);
+            }
+          }
+        }
+        return res;
+      } catch (e) {
+        console.warn('Apps Script login failed, falling back to local storage', e);
+      }
+    }
+
     return { success: false, message: 'Thông tin đăng nhập hoặc mật khẩu không chính xác.' };
   }
 

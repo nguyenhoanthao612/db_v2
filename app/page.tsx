@@ -31,7 +31,7 @@ export default function Home() {
     message: '',
   });
 
-  // Initial local storage setup
+  // 1. Initial page load mount logic (renders instantly from local cache)
   useEffect(() => {
     DatabaseService.initLocalStorage();
 
@@ -45,50 +45,110 @@ export default function Home() {
         router.push('/admin/reports');
       }
     }
+  }, [router]);
 
+  // 2. Highly optimized progressive background sync logic (non-blocking)
+  useEffect(() => {
     const config = DatabaseService.getSyncConfig();
-    if (config.appsScriptUrl) {
-      setSettingsUrl(config.appsScriptUrl);
-      
-      const isAlreadySynced = sessionStorage.getItem('ic3_session_synced') === 'true';
-      if (isAlreadySynced) {
-        console.log('Already synced in this session. Skipping background auto-sync.');
-        return;
-      }
-      
-      // Auto-sync completely in the background after page has successfully loaded and rendered
-      const delayTimer = setTimeout(() => {
+    if (!config.appsScriptUrl) return;
+
+    setSettingsUrl(config.appsScriptUrl);
+
+    // Progressive syncing flags
+    const isLoginSynced = sessionStorage.getItem('ic3_login_synced') === 'true';
+    const isFullSynced = sessionStorage.getItem('ic3_full_synced') === 'true';
+
+    // Auto-sync completely in the background after page has successfully loaded/changed
+    const delayTimer = setTimeout(() => {
+      if (!currentUser) {
+        // A. If NOT logged in: Only pull basic login student/admin list (tiny payload, extremely fast)
+        if (isLoginSynced) return;
         setSyncStatus('syncing');
-        DatabaseService.pullFromGoogleSheets()
+        DatabaseService.pullLoginData()
           .then((res) => {
             if (res.success) {
-              console.log('Background auto-sync with Google Sheets completed.');
-              sessionStorage.setItem('ic3_session_synced', 'true');
+              console.log('Background sync of user accounts completed.');
+              sessionStorage.setItem('ic3_login_synced', 'true');
               setSyncTrigger((prev) => prev + 1);
               setSyncStatus('success');
               setTimeout(() => setSyncStatus('idle'), 3000);
             } else {
-              console.warn('Background auto-sync failed internally:', res.message);
               setSyncStatus('error');
               setTimeout(() => setSyncStatus('idle'), 4000);
             }
           })
           .catch((err) => {
-            console.error('Background auto-sync failed with exception:', err);
+            console.error('Login data sync error:', err);
             setSyncStatus('error');
             setTimeout(() => setSyncStatus('idle'), 4000);
           });
-      }, 1500); // 1.5 second delay to let the initial rendering finish completely without blocking
+      } else if (userRole === 'Student') {
+        // B. If logged in as STUDENT: Sync exams & scores first, then pull questions in the background
+        if (isFullSynced) return;
+        setSyncStatus('syncing');
+        DatabaseService.pullDashboardData()
+          .then((res) => {
+            if (res.success) {
+              console.log('Background sync of student exams/scores completed. Now syncing questions bank...');
+              return DatabaseService.pullQuestionsData();
+            }
+            throw new Error('Dashboard sync failed');
+          })
+          .then((res) => {
+            if (res.success) {
+              console.log('Progressive background questions pull completed successfully.');
+              sessionStorage.setItem('ic3_full_synced', 'true');
+              setSyncTrigger((prev) => prev + 1);
+              setSyncStatus('success');
+              setTimeout(() => setSyncStatus('idle'), 3000);
+            } else {
+              setSyncStatus('error');
+              setTimeout(() => setSyncStatus('idle'), 4000);
+            }
+          })
+          .catch((err) => {
+            console.error('Student progressive sync failed:', err);
+            setSyncStatus('error');
+            setTimeout(() => setSyncStatus('idle'), 4000);
+          });
+      } else if (userRole === 'Admin') {
+        // C. If logged in as ADMIN: Pull all tables (Admins need full data view)
+        if (isFullSynced) return;
+        setSyncStatus('syncing');
+        DatabaseService.pullFromGoogleSheets()
+          .then((res) => {
+            if (res.success) {
+              console.log('Full background database sync completed.');
+              sessionStorage.setItem('ic3_full_synced', 'true');
+              setSyncTrigger((prev) => prev + 1);
+              setSyncStatus('success');
+              setTimeout(() => setSyncStatus('idle'), 3000);
+            } else {
+              setSyncStatus('error');
+              setTimeout(() => setSyncStatus('idle'), 4000);
+            }
+          })
+          .catch((err) => {
+            console.error('Admin sync failed:', err);
+            setSyncStatus('error');
+            setTimeout(() => setSyncStatus('idle'), 4000);
+          });
+      }
+    }, 1200); // Gentle delay to allow the active route/page rendering to load fully
 
-      return () => clearTimeout(delayTimer);
-    }
-  }, [router]);
+    return () => clearTimeout(delayTimer);
+  }, [currentUser, userRole]);
 
   const handleLoginSuccess = (user: any, role: 'Admin' | 'Student') => {
     setCurrentUser(user);
     setUserRole(role);
     sessionStorage.setItem('ic3_current_user', JSON.stringify(user));
     sessionStorage.setItem('ic3_user_role', role);
+    
+    // Reset progressive flags on login to force background updates of dashboard/exams for the user
+    sessionStorage.removeItem('ic3_full_synced');
+    setSyncTrigger((prev) => prev + 1);
+
     if (role === 'Admin') {
       router.push('/admin/reports');
     }

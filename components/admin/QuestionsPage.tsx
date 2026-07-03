@@ -172,13 +172,10 @@ export default function QuestionsPage() {
   const [parseStatus, setParseStatus] = useState('');
 
   // Loading States
-  const [loadingQuestions, setLoadingQuestions] = useState(true);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
   const loadQuestions = async () => {
-    if (questions.length === 0) {
-      setLoadingQuestions(true);
-    }
     try {
       // Get filtered list and unfiltered total count in parallel using Promise.all
       const [filteredRes, unfilteredRes] = await Promise.all([
