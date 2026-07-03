@@ -79,7 +79,7 @@ export default function Header({
         {/* CONTROLS */}
         <div className="flex items-center gap-2 sm:gap-3.5">
           {/* DATABASE CONNECTION STATUS */}
-          {config.appsScriptUrl && currentUser && !hideSyncButton && (
+          {config.appsScriptUrl && currentUser && userRole === 'Admin' && !hideSyncButton && (
             <button
               onClick={handleSync}
               disabled={syncing}
