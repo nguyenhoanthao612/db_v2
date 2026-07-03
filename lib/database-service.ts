@@ -55,6 +55,14 @@ export class DatabaseService {
 
   // Get active Sync Configuration
   public static getSyncConfig(): SyncConfig {
+    const envUrl = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL;
+    if (envUrl) {
+      const localConfig = getLocalStorage<SyncConfig>(this.KEY_SYNC_CONFIG, { appsScriptUrl: '' });
+      return {
+        appsScriptUrl: envUrl,
+        lastSynced: localConfig.lastSynced || new Date().toISOString(),
+      };
+    }
     return getLocalStorage<SyncConfig>(this.KEY_SYNC_CONFIG, { appsScriptUrl: '' });
   }
 

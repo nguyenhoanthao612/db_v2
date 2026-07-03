@@ -87,13 +87,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <h2 className="text-xl sm:text-2xl font-black text-slate-800">Quản trị Hệ thống IC3 GS6</h2>
                 <p className="text-xs text-slate-400 font-bold">Quản lý đồng bộ hai chiều tuyệt đối, chỉnh sửa học sinh, đề ôn tập và ngân hàng câu hỏi</p>
               </div>
-
-              <Link
-                href="/admin/settings"
-                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-extrabold rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer"
-              >
-                <Settings className="w-4 h-4 animate-spin" style={{ animationDuration: '6s' }} /> Cấu hình Sheets URL
-              </Link>
             </div>
 
             {/* TABS SELECTOR */}
@@ -103,7 +96,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { id: 'students', label: 'Quản lý Học sinh', icon: Users, href: '/admin/students' },
                 { id: 'exams', label: 'Quản lý Đề ôn tập', icon: BookOpen, href: '/admin/exams' },
                 { id: 'questions', label: 'Ngân hàng Câu hỏi', icon: HelpCircle, href: '/admin/questions' },
-                { id: 'sync', label: 'Cài đặt kết nối Sheets', icon: FileSpreadsheet, href: '/admin/settings' },
               ].map((tab) => {
                 const Icon = tab.icon;
                 const isSelected = activeTab === tab.id;

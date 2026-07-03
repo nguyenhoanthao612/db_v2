@@ -77,26 +77,16 @@ export default function Header({
         {/* CONTROLS */}
         <div className="flex items-center gap-2 sm:gap-3.5">
           {/* DATABASE CONNECTION STATUS */}
-          {config.appsScriptUrl ? (
+          {config.appsScriptUrl && (
             <button
               onClick={handleSync}
               disabled={syncing}
-              title="Đã kết nối Google Sheets. Nhấn để đồng bộ lại."
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-green-50 border border-green-100 text-green-700 text-xs font-bold hover:bg-green-100 transition cursor-pointer shadow-sm select-none"
+              title="Đồng bộ dữ liệu với Google Sheets."
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100 text-blue-700 text-xs font-bold hover:bg-blue-100 transition cursor-pointer shadow-sm select-none"
             >
-              <CloudLightning className="w-3.5 h-3.5 text-green-500 animate-bounce" />
-              <span className="hidden sm:inline">{syncMsg || 'Google Sheets Connected'}</span>
-              <RefreshCw className={`w-3 h-3 text-green-600 ${syncing ? 'animate-spin' : ''}`} />
-            </button>
-          ) : (
-            <button
-              onClick={onOpenSettings}
-              title="Nhấn để cấu hình Google Sheets kết nối 2 chiều"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-100 text-amber-700 text-xs font-bold hover:bg-amber-100 transition cursor-pointer shadow-sm select-none"
-            >
-              <Database className="w-3.5 h-3.5 text-amber-500" />
-              <span className="hidden sm:inline">Chế độ Local (Nhấp để Sync Sheets)</span>
-              <Settings className="w-3 h-3 text-amber-600 animate-spin" style={{ animationDuration: '6s' }} />
+              <CloudLightning className="w-3.5 h-3.5 text-blue-500 animate-bounce" />
+              <span>{syncMsg || 'Đồng bộ Google Sheets'}</span>
+              <RefreshCw className={`w-3 h-3 text-blue-600 ${syncing ? 'animate-spin' : ''}`} />
             </button>
           )}
 
@@ -127,15 +117,6 @@ export default function Header({
               </button>
             </div>
           )}
-
-          {/* SETTINGS TRIGGER */}
-          <button
-            onClick={onOpenSettings}
-            className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition cursor-pointer"
-            title="Cài đặt Google Sheets"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
         </div>
       </div>
     </header>
