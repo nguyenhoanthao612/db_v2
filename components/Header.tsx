@@ -77,7 +77,7 @@ export default function Header({
         {/* CONTROLS */}
         <div className="flex items-center gap-2 sm:gap-3.5">
           {/* DATABASE CONNECTION STATUS */}
-          {config.appsScriptUrl && (
+          {config.appsScriptUrl && currentUser && (
             <button
               onClick={handleSync}
               disabled={syncing}
