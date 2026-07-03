@@ -30,6 +30,111 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   const [feedbackIsCorrect, setFeedbackIsCorrect] = useState(false);
   const [submittedQuestions, setSubmittedQuestions] = useState<Record<string, { isCorrect: boolean }>>({});
 
+  // State reference for keyboard keydown event handlers
+  const keyHandlerStateRef = useRef<any>(null);
+
+  useEffect(() => {
+    keyHandlerStateRef.current = {
+      loading,
+      quizFinished,
+      questions,
+      showFeedbackModal,
+      mode,
+      submittedQuestions,
+      currentIdx,
+      answersState,
+      handleFeedbackNext,
+      handleNext,
+      handleFinish,
+      handleSubmitQuestion
+    };
+  });
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if the pressed key is Enter
+      if (e.key !== 'Enter') return;
+      
+      const state = keyHandlerStateRef.current;
+      if (!state || state.loading || state.quizFinished || state.questions.length === 0) return;
+
+      // Prevent default browser behavior for Enter
+      e.preventDefault();
+
+      // If feedback modal is active, Enter key acts as the close/next feedback button
+      if (state.showFeedbackModal) {
+        state.handleFeedbackNext();
+        return;
+      }
+
+      const currentQ = state.questions[state.currentIdx];
+      if (!currentQ) return;
+
+      const currentAnswer = state.answersState[currentQ.QuestionID];
+      
+      // Calculate isCurrentAnswered
+      const isCurrentAnswered = (() => {
+        if (currentAnswer === null || currentAnswer === undefined) return false;
+        if (Array.isArray(currentAnswer)) {
+          if (currentQ.QuestionType?.toLowerCase() === 'match image to text') {
+            return currentAnswer.some((v: any) => v !== null && v !== undefined);
+          }
+          return currentAnswer.length > 0;
+        }
+        if (typeof currentAnswer === 'object') {
+          return Object.keys(currentAnswer).length > 0;
+        }
+        return String(currentAnswer).trim() !== '';
+      })();
+
+      // Calculate hasUnanswered
+      const hasUnanswered = state.questions.some((q: any) => {
+        const ans = state.answersState[q.QuestionID];
+        if (ans === null || ans === undefined) return true;
+        if (Array.isArray(ans)) {
+          if (q.QuestionType?.toLowerCase() === 'match image to text') {
+            return !ans.some((v: any) => v !== null && v !== undefined);
+          }
+          return ans.length === 0;
+        }
+        if (typeof ans === 'object') {
+          return Object.keys(ans).length === 0;
+        }
+        return String(ans).trim() === '';
+      });
+
+      if (state.mode === 'training' || state.mode === 'race') {
+        const isSubmitted = !!state.submittedQuestions[currentQ.QuestionID];
+        if (isSubmitted) {
+          // If already submitted, Enter key goes to the next question or finishes the quiz
+          if (state.currentIdx < state.questions.length - 1) {
+            state.handleNext();
+          } else {
+            state.handleFinish();
+          }
+        } else {
+          // If not submitted yet and student has answered, Enter submits the answer
+          if (isCurrentAnswered) {
+            state.handleSubmitQuestion();
+          }
+        }
+      } else if (state.mode === 'testing') {
+        // In testing mode, Enter key corresponds to the next question button
+        if (state.currentIdx < state.questions.length - 1) {
+          state.handleNext();
+        } else if (!hasUnanswered) {
+          // If it is the last question and there are no unanswered questions, Enter submits the quiz
+          state.handleFinish();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   // Draggable feedback modal state
   const [feedbackModalPos, setFeedbackModalPos] = useState({ x: 0, y: 0 });
   const [isDraggingModal, setIsDraggingModal] = useState(false);
@@ -343,17 +448,17 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     }));
   };
 
-  const handleNext = () => {
+  function handleNext() {
     if (currentIdx < questions.length - 1) {
       setCurrentIdx((prev) => prev + 1);
     }
-  };
+  }
 
-  const handlePrev = () => {
+  function handlePrev() {
     if (currentIdx > 0) {
       setCurrentIdx((prev) => prev - 1);
     }
-  };
+  }
 
   // Grade single question
   const gradeQuestion = (q: Question, studentAnswer: any): boolean => {
@@ -479,7 +584,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     }
   };
 
-  const handleFinish = async () => {
+  async function handleFinish() {
     if (timerRef.current) clearInterval(timerRef.current);
 
     let correctCount = 0;
@@ -522,7 +627,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     handleFinishRef.current = handleFinish;
   }, [handleFinish]);
 
-  const handleSubmitQuestion = async () => {
+  async function handleSubmitQuestion() {
     const q = questions[currentIdx];
     const ans = answersState[q.QuestionID];
     const isCorrect = gradeQuestion(q, ans);
@@ -553,7 +658,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     }
   };
 
-  const handleFeedbackNext = () => {
+  function handleFeedbackNext() {
     setShowFeedbackModal(false);
     
     if (mode === 'race' && !feedbackIsCorrect) {
