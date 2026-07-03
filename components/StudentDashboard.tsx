@@ -22,7 +22,9 @@ export default function StudentDashboard({ student, onSelectExam, syncTrigger }:
 
   useEffect(() => {
     async function loadData() {
-      setLoading(true);
+      if (exams.length === 0 && scores.length === 0) {
+        setLoading(true);
+      }
       try {
         const [loadedExams, loadedScores] = await Promise.all([
           DatabaseService.getExams(),
@@ -37,6 +39,7 @@ export default function StudentDashboard({ student, onSelectExam, syncTrigger }:
       }
     }
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [student.StudentID, syncTrigger]);
 
   // Statistics calculation

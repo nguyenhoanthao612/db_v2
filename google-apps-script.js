@@ -28,6 +28,47 @@ function doGet(e) {
     if (!action) {
       return createResponse({ success: false, message: "Thiếu tham số action." });
     }
+
+    // 0. LẤY TOÀN BỘ DỮ LIỆU ĐỂ ĐỒNG BỘ SIÊU TỐC (MỘT LẦN GỌI DUY NHẤT)
+    if (action === "getAllData") {
+      var sheets = ss.getSheets();
+      var exams = [];
+      for (var i = 0; i < sheets.length; i++) {
+        var sheetName = sheets[i].getName();
+        if (sheetName.indexOf("LV1_") === 0 || sheetName.indexOf("LV2_") === 0 || sheetName.indexOf("LV3_") === 0) {
+          var parts = sheetName.split("_");
+          var level = parts[0];
+          var examId = parts[1];
+          var questionIds = getColumnValues(sheets[i], "QuestionID");
+          exams.push({
+            ExamID: examId,
+            Level: level,
+            QuestionIDs: questionIds
+          });
+        }
+      }
+
+      var questionsSheet = ss.getSheetByName("Questions");
+      var questions = questionsSheet ? readSheetData(questionsSheet) : [];
+
+      var studentSheet = ss.getSheetByName("Student");
+      var students = studentSheet ? readSheetData(studentSheet) : [];
+
+      var scoreSheet = ss.getSheetByName("Score");
+      var scores = scoreSheet ? readSheetData(scoreSheet) : [];
+
+      var adminSheet = ss.getSheetByName("Admin");
+      var admins = adminSheet ? readSheetData(adminSheet) : [];
+
+      return createResponse({
+        success: true,
+        exams: exams,
+        questions: questions,
+        students: students,
+        scores: scores,
+        admins: admins
+      });
+    }
     
     // 1. LẤY TOÀN BỘ DANH SÁCH SHEET ĐỀ THI (CÓ DẠNG LVx_OTy) VÀ LEVEL
     if (action === "getExams") {

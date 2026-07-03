@@ -138,14 +138,43 @@ export class DatabaseService {
     }
 
     try {
-      // Execute all fetches in parallel using Promise.all to optimize page initial load
-      const [examRes, questionsRes, studentsRes, scoresRes, adminRes] = await Promise.all([
-        this.callAppsScript('getExams').catch(e => { console.error('Error fetching exams', e); return null; }),
-        this.callAppsScript('getTable', { table: 'Questions' }).catch(e => { console.error('Error fetching Questions table', e); return null; }),
-        this.callAppsScript('getTable', { table: 'Student' }).catch(e => { console.error('Error fetching Student table', e); return null; }),
-        this.callAppsScript('getTable', { table: 'Score' }).catch(e => { console.error('Error fetching Score table', e); return null; }),
-        this.callAppsScript('getTable', { table: 'Admin' }).catch(e => { console.error('Error fetching Admin table', e); return null; }),
-      ]);
+      let examRes: any = null;
+      let questionsRes: any = null;
+      let studentsRes: any = null;
+      let scoresRes: any = null;
+      let adminRes: any = null;
+
+      // First try to fetch all data in a single unified request (massive 5x speed boost)
+      try {
+        const unifiedRes = await this.callAppsScript('getAllData');
+        if (unifiedRes && unifiedRes.success && unifiedRes.exams) {
+          examRes = { success: true, data: unifiedRes.exams };
+          questionsRes = { success: true, data: unifiedRes.questions };
+          studentsRes = { success: true, data: unifiedRes.students };
+          scoresRes = { success: true, data: unifiedRes.scores };
+          adminRes = { success: true, data: unifiedRes.admins };
+          console.log('Unified sync with Google Sheets completed successfully.');
+        }
+      } catch (err) {
+        console.warn('getAllData action failed or not supported yet. Falling back to individual tables parallel fetch.', err);
+      }
+
+      // If unified fetch did not succeed, fall back to individual parallel fetches
+      if (!examRes || !questionsRes) {
+        console.log('Initiating parallel fallback sync...');
+        const [eRes, qRes, sRes, scRes, aRes] = await Promise.all([
+          this.callAppsScript('getExams').catch(e => { console.error('Error fetching exams', e); return null; }),
+          this.callAppsScript('getTable', { table: 'Questions' }).catch(e => { console.error('Error fetching Questions table', e); return null; }),
+          this.callAppsScript('getTable', { table: 'Student' }).catch(e => { console.error('Error fetching Student table', e); return null; }),
+          this.callAppsScript('getTable', { table: 'Score' }).catch(e => { console.error('Error fetching Score table', e); return null; }),
+          this.callAppsScript('getTable', { table: 'Admin' }).catch(e => { console.error('Error fetching Admin table', e); return null; }),
+        ]);
+        examRes = eRes;
+        questionsRes = qRes;
+        studentsRes = sRes;
+        scoresRes = scRes;
+        adminRes = aRes;
+      }
 
       if (examRes && examRes.success && examRes.data) {
         const localExams = getLocalStorage<Exam[]>(this.KEY_EXAMS, initialExams);

@@ -30,7 +30,9 @@ export default function StudentsPage() {
   const [actionLoading, setActionLoading] = useState(false);
 
   const loadStudents = async () => {
-    setLoadingStudents(true);
+    if (students.length === 0) {
+      setLoadingStudents(true);
+    }
     try {
       const { students: sts, total } = await DatabaseService.getStudents({
         search: studentSearch,

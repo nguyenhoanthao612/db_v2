@@ -18,7 +18,9 @@ export default function ReportsPage() {
   });
 
   const loadStats = async () => {
-    setLoadingStats(true);
+    if (stats.totalStudents === 0 && stats.totalExams === 0) {
+      setLoadingStats(true);
+    }
     try {
       const [studentsData, allExams, questionsData, scores] = await Promise.all([
         DatabaseService.getStudents(),
@@ -54,6 +56,7 @@ export default function ReportsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncTrigger]);
 
   return (
