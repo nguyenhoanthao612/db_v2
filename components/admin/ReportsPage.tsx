@@ -20,10 +20,15 @@ export default function ReportsPage() {
   const loadStats = async () => {
     setLoadingStats(true);
     try {
-      const { total: stTotal } = await DatabaseService.getStudents();
-      const allExams = await DatabaseService.getExams();
-      const { total: qTotalCount } = await DatabaseService.getQuestions();
-      const scores = await DatabaseService.getScores();
+      const [studentsData, allExams, questionsData, scores] = await Promise.all([
+        DatabaseService.getStudents(),
+        DatabaseService.getExams(),
+        DatabaseService.getQuestions(),
+        DatabaseService.getScores()
+      ]);
+
+      const stTotal = studentsData.total;
+      const qTotalCount = questionsData.total;
 
       const totalCorrect = scores.reduce((acc, s) => acc + s.Correct, 0);
       const totalWrong = scores.reduce((acc, s) => acc + s.Wrong, 0);

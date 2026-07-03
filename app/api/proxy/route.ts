@@ -3,10 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const targetUrlString = searchParams.get('url') || process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || process.env.APPS_SCRIPT_URL;
+    let targetUrlString = searchParams.get('url') || process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || process.env.APPS_SCRIPT_URL;
     if (!targetUrlString) {
       return NextResponse.json({ success: false, message: 'Missing target URL' }, { status: 400 });
     }
+    targetUrlString = targetUrlString.replace(/^["']|["']$/g, '').trim();
 
     const targetUrl = new URL(targetUrlString);
     // Forward all other search params
@@ -55,10 +56,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const targetUrlString = searchParams.get('url') || process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || process.env.APPS_SCRIPT_URL;
+    let targetUrlString = searchParams.get('url') || process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || process.env.APPS_SCRIPT_URL;
     if (!targetUrlString) {
       return NextResponse.json({ success: false, message: 'Missing target URL' }, { status: 400 });
     }
+    targetUrlString = targetUrlString.replace(/^["']|["']$/g, '').trim();
 
     const targetUrl = new URL(targetUrlString);
     // Forward any extra search params if present

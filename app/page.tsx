@@ -22,7 +22,7 @@ export default function Home() {
 
   // Sync state
   const [syncTrigger, setSyncTrigger] = useState(0);
-  const [autoSyncing, setAutoSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [showSettings, setShowSettings] = useState(false);
   const [settingsUrl, setSettingsUrl] = useState('');
   const [testingConnection, setTestingConnection] = useState(false);
@@ -50,17 +50,30 @@ export default function Home() {
     if (config.appsScriptUrl) {
       setSettingsUrl(config.appsScriptUrl);
       
-      // Auto-sync in background so student/other devices have fresh Google Sheets data
-      setAutoSyncing(true);
-      DatabaseService.pullFromGoogleSheets()
-        .then((res) => {
-          if (res.success) {
-            console.log('Background auto-sync with Google Sheets completed.');
-            setSyncTrigger((prev) => prev + 1);
-          }
-        })
-        .catch((err) => console.error('Background auto-sync failed', err))
-        .finally(() => setAutoSyncing(false));
+      // Auto-sync completely in the background after page has successfully loaded and rendered
+      const delayTimer = setTimeout(() => {
+        setSyncStatus('syncing');
+        DatabaseService.pullFromGoogleSheets()
+          .then((res) => {
+            if (res.success) {
+              console.log('Background auto-sync with Google Sheets completed.');
+              setSyncTrigger((prev) => prev + 1);
+              setSyncStatus('success');
+              setTimeout(() => setSyncStatus('idle'), 3000);
+            } else {
+              console.warn('Background auto-sync failed internally:', res.message);
+              setSyncStatus('error');
+              setTimeout(() => setSyncStatus('idle'), 4000);
+            }
+          })
+          .catch((err) => {
+            console.error('Background auto-sync failed with exception:', err);
+            setSyncStatus('error');
+            setTimeout(() => setSyncStatus('idle'), 4000);
+          });
+      }, 1500); // 1.5 second delay to let the initial rendering finish completely without blocking
+
+      return () => clearTimeout(delayTimer);
     }
   }, [router]);
 
@@ -146,12 +159,64 @@ export default function Home() {
         hideSyncButton={!!(selectedExam && activeExamLevel)}
       />
 
-      {autoSyncing && (
-        <div className="bg-indigo-600 text-white text-[11px] font-black py-2 px-4 flex items-center justify-center gap-2 animate-pulse shadow-inner uppercase tracking-wider">
-          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-          <span>Đang tự động tải dữ liệu mới nhất từ Google Sheets...</span>
-        </div>
-      )}
+      {/* Floating Background Sync Status Toast (Non-blocking & Elegant in the Corner) */}
+      <AnimatePresence>
+        {syncStatus !== 'idle' && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3.5 rounded-2xl shadow-xl border bg-white max-w-sm pointer-events-auto"
+            style={{
+              borderColor:
+                syncStatus === 'syncing'
+                  ? '#e2e8f0'
+                  : syncStatus === 'success'
+                  ? '#bbf7d0'
+                  : '#fecaca',
+              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+            }}
+          >
+            {syncStatus === 'syncing' && (
+              <>
+                <div className="relative flex h-5 w-5 items-center justify-center">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <RefreshCw className="relative h-4 w-4 text-blue-500 animate-spin" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Đang cập nhật...</h4>
+                  <p className="text-[10px] text-slate-400 font-bold mt-0.5">Tải dữ liệu mới nhất từ Google Sheets</p>
+                </div>
+              </>
+            )}
+
+            {syncStatus === 'success' && (
+              <>
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-green-50">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-green-800 uppercase tracking-wider">Đồng bộ hoàn tất!</h4>
+                  <p className="text-[10px] text-green-600/85 font-bold mt-0.5">Hệ thống đã cập nhật dữ liệu mới nhất</p>
+                </div>
+              </>
+            )}
+
+            {syncStatus === 'error' && (
+              <>
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-50">
+                  <WifiOff className="h-4 w-4 text-amber-500" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-amber-800 uppercase tracking-wider">Chạy ngoại tuyến</h4>
+                  <p className="text-[10px] text-amber-600/85 font-bold mt-0.5">Không kết nối được Sheets - Dùng dữ liệu hiện tại</p>
+                </div>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Container */}
       <main id="main-content-section" className="transition-all duration-300">

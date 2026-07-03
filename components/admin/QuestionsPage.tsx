@@ -178,21 +178,21 @@ export default function QuestionsPage() {
   const loadQuestions = async () => {
     setLoadingQuestions(true);
     try {
-      // Get filtered list
-      const { questions: qs, total } = await DatabaseService.getQuestions({
-        search: qSearch,
-        level: qLevelFilter,
-        examId: qExamFilter,
-        type: qTypeFilter,
-        limit: qLimit,
-        offset: qOffset,
-      });
-      setQuestions(qs);
-      setQTotal(total);
-
-      // Get unfiltered total count for ID auto-generation
-      const { total: unfilteredTotal } = await DatabaseService.getQuestions();
-      setTotalQuestionsCount(unfilteredTotal);
+      // Get filtered list and unfiltered total count in parallel using Promise.all
+      const [filteredRes, unfilteredRes] = await Promise.all([
+        DatabaseService.getQuestions({
+          search: qSearch,
+          level: qLevelFilter,
+          examId: qExamFilter,
+          type: qTypeFilter,
+          limit: qLimit,
+          offset: qOffset,
+        }),
+        DatabaseService.getQuestions()
+      ]);
+      setQuestions(filteredRes.questions);
+      setQTotal(filteredRes.total);
+      setTotalQuestionsCount(unfilteredRes.total);
     } catch (e) {
       console.error(e);
     } finally {

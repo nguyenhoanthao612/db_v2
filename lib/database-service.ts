@@ -57,19 +57,25 @@ export class DatabaseService {
   public static getSyncConfig(): SyncConfig {
     const envUrl = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL;
     if (envUrl) {
+      const sanitizedEnv = envUrl.replace(/^["']|["']$/g, '').trim();
       const localConfig = getLocalStorage<SyncConfig>(this.KEY_SYNC_CONFIG, { appsScriptUrl: '' });
       return {
-        appsScriptUrl: envUrl,
+        appsScriptUrl: sanitizedEnv,
         lastSynced: localConfig.lastSynced || new Date().toISOString(),
       };
     }
-    return getLocalStorage<SyncConfig>(this.KEY_SYNC_CONFIG, { appsScriptUrl: '' });
+    const localConfig = getLocalStorage<SyncConfig>(this.KEY_SYNC_CONFIG, { appsScriptUrl: '' });
+    return {
+      ...localConfig,
+      appsScriptUrl: (localConfig.appsScriptUrl || '').replace(/^["']|["']$/g, '').trim(),
+    };
   }
 
   // Save active Sync Configuration
   public static saveSyncConfig(url: string): void {
+    const sanitizedUrl = (url || '').replace(/^["']|["']$/g, '').trim();
     setLocalStorage<SyncConfig>(this.KEY_SYNC_CONFIG, {
-      appsScriptUrl: url,
+      appsScriptUrl: sanitizedUrl,
       lastSynced: new Date().toISOString(),
     });
   }
@@ -132,9 +138,16 @@ export class DatabaseService {
     }
 
     try {
-      // Fetch exams list
-      const examRes = await this.callAppsScript('getExams');
-      if (examRes.success && examRes.data) {
+      // Execute all fetches in parallel using Promise.all to optimize page initial load
+      const [examRes, questionsRes, studentsRes, scoresRes, adminRes] = await Promise.all([
+        this.callAppsScript('getExams').catch(e => { console.error('Error fetching exams', e); return null; }),
+        this.callAppsScript('getTable', { table: 'Questions' }).catch(e => { console.error('Error fetching Questions table', e); return null; }),
+        this.callAppsScript('getTable', { table: 'Student' }).catch(e => { console.error('Error fetching Student table', e); return null; }),
+        this.callAppsScript('getTable', { table: 'Score' }).catch(e => { console.error('Error fetching Score table', e); return null; }),
+        this.callAppsScript('getTable', { table: 'Admin' }).catch(e => { console.error('Error fetching Admin table', e); return null; }),
+      ]);
+
+      if (examRes && examRes.success && examRes.data) {
         const localExams = getLocalStorage<Exam[]>(this.KEY_EXAMS, initialExams);
         const mergedExams = examRes.data.map((incoming: any) => {
           const match = localExams.find((e) => e.ExamID === incoming.ExamID && e.Level === incoming.Level);
@@ -146,9 +159,7 @@ export class DatabaseService {
         setLocalStorage(this.KEY_EXAMS, mergedExams);
       }
 
-      // Fetch Questions table
-      const questionsRes = await this.callAppsScript('getTable', { table: 'Questions' });
-      if (questionsRes.success && questionsRes.data) {
+      if (questionsRes && questionsRes.success && questionsRes.data) {
         // Correct dates and fields
         const formattedQuestions = questionsRes.data.map((q: any) => ({
           ...q,
@@ -157,15 +168,11 @@ export class DatabaseService {
         setLocalStorage(this.KEY_QUESTIONS, formattedQuestions);
       }
 
-      // Fetch Student table
-      const studentsRes = await this.callAppsScript('getTable', { table: 'Student' });
-      if (studentsRes.success && studentsRes.data) {
+      if (studentsRes && studentsRes.success && studentsRes.data) {
         setLocalStorage(this.KEY_STUDENTS, studentsRes.data);
       }
 
-      // Fetch Score table
-      const scoresRes = await this.callAppsScript('getTable', { table: 'Score' });
-      if (scoresRes.success && scoresRes.data) {
+      if (scoresRes && scoresRes.success && scoresRes.data) {
         const formattedScores = scoresRes.data.map((s: any) => ({
           ...s,
           Score: Number(s.Score),
@@ -176,9 +183,7 @@ export class DatabaseService {
         setLocalStorage(this.KEY_SCORES, formattedScores);
       }
 
-      // Fetch Admin table
-      const adminRes = await this.callAppsScript('getTable', { table: 'Admin' });
-      if (adminRes.success && adminRes.data) {
+      if (adminRes && adminRes.success && adminRes.data) {
         setLocalStorage(this.KEY_ADMINS, adminRes.data);
       }
 

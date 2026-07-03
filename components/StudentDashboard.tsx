@@ -24,8 +24,10 @@ export default function StudentDashboard({ student, onSelectExam, syncTrigger }:
     async function loadData() {
       setLoading(true);
       try {
-        const loadedExams = await DatabaseService.getExams();
-        const loadedScores = await DatabaseService.getScores({ studentId: student.StudentID });
+        const [loadedExams, loadedScores] = await Promise.all([
+          DatabaseService.getExams(),
+          DatabaseService.getScores({ studentId: student.StudentID })
+        ]);
         setExams(loadedExams);
         setScores(loadedScores);
       } catch (e) {
