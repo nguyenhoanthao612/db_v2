@@ -42,7 +42,7 @@ export default function Home() {
       setCurrentUser(JSON.parse(storedUser));
       setUserRole(storedRole as any);
       if (storedRole === 'Admin') {
-        router.push('/admin/reports');
+        window.location.replace('/admin/reports');
       }
     }
   }, [router]);
@@ -134,7 +134,7 @@ export default function Home() {
             setTimeout(() => setSyncStatus('idle'), 4000);
           });
       }
-    }, 1200); // Gentle delay to allow the active route/page rendering to load fully
+    }, 50); // Gentle delay to allow the active route/page rendering to load fully
 
     return () => clearTimeout(delayTimer);
   }, [currentUser, userRole]);
@@ -150,7 +150,7 @@ export default function Home() {
     setSyncTrigger((prev) => prev + 1);
 
     if (role === 'Admin') {
-      router.push('/admin/reports');
+      window.location.replace('/admin/reports');
     }
   };
 
