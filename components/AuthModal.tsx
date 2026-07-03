@@ -8,9 +8,10 @@ import { motion } from 'motion/react';
 
 interface AuthModalProps {
   onLoginSuccess: (user: any, role: 'Admin' | 'Student') => void;
+  syncTrigger?: number;
 }
 
-export default function AuthModal({ onLoginSuccess }: AuthModalProps) {
+export default function AuthModal({ onLoginSuccess, syncTrigger }: AuthModalProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [role, setRole] = useState<'Student' | 'Admin'>('Student');
   const [username, setUsername] = useState('');
@@ -52,7 +53,7 @@ export default function AuthModal({ onLoginSuccess }: AuthModalProps) {
       }
     };
     fetchStudents();
-  }, [isLogin]);
+  }, [isLogin, syncTrigger]);
 
   // Derive schools list from allStudents
   const schools = React.useMemo(() => {

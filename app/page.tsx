@@ -50,6 +50,12 @@ export default function Home() {
     if (config.appsScriptUrl) {
       setSettingsUrl(config.appsScriptUrl);
       
+      const isAlreadySynced = sessionStorage.getItem('ic3_session_synced') === 'true';
+      if (isAlreadySynced) {
+        console.log('Already synced in this session. Skipping background auto-sync.');
+        return;
+      }
+      
       // Auto-sync completely in the background after page has successfully loaded and rendered
       const delayTimer = setTimeout(() => {
         setSyncStatus('syncing');
@@ -57,6 +63,7 @@ export default function Home() {
           .then((res) => {
             if (res.success) {
               console.log('Background auto-sync with Google Sheets completed.');
+              sessionStorage.setItem('ic3_session_synced', 'true');
               setSyncTrigger((prev) => prev + 1);
               setSyncStatus('success');
               setTimeout(() => setSyncStatus('idle'), 3000);
@@ -229,7 +236,7 @@ export default function Home() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              <AuthModal onLoginSuccess={handleLoginSuccess} />
+              <AuthModal onLoginSuccess={handleLoginSuccess} syncTrigger={syncTrigger} />
             </motion.div>
           ) : selectedExam && activeExamLevel ? (
             <motion.div
