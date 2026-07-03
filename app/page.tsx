@@ -130,6 +130,7 @@ export default function Home() {
         onOpenSettings={() => setShowSettings(true)}
         syncTrigger={syncTrigger}
         onSyncComplete={triggerSyncUpdate}
+        hideSyncButton={!!(selectedExam && activeExamLevel)}
       />
 
       {/* Main Container */}

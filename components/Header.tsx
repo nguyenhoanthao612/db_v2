@@ -14,6 +14,7 @@ interface HeaderProps {
   onOpenSettings: () => void;
   syncTrigger: number;
   onSyncComplete: () => void;
+  hideSyncButton?: boolean;
 }
 
 export default function Header({
@@ -23,6 +24,7 @@ export default function Header({
   onOpenSettings,
   syncTrigger,
   onSyncComplete,
+  hideSyncButton = false,
 }: HeaderProps) {
   const [config, setConfig] = useState<SyncConfig>({ appsScriptUrl: '' });
   const [syncing, setSyncing] = useState(false);
@@ -77,7 +79,7 @@ export default function Header({
         {/* CONTROLS */}
         <div className="flex items-center gap-2 sm:gap-3.5">
           {/* DATABASE CONNECTION STATUS */}
-          {config.appsScriptUrl && currentUser && (
+          {config.appsScriptUrl && currentUser && !hideSyncButton && (
             <button
               onClick={handleSync}
               disabled={syncing}
