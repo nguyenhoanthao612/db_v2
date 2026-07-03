@@ -22,6 +22,7 @@ export default function Home() {
 
   // Sync state
   const [syncTrigger, setSyncTrigger] = useState(0);
+  const [autoSyncing, setAutoSyncing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsUrl, setSettingsUrl] = useState('');
   const [testingConnection, setTestingConnection] = useState(false);
@@ -48,6 +49,18 @@ export default function Home() {
     const config = DatabaseService.getSyncConfig();
     if (config.appsScriptUrl) {
       setSettingsUrl(config.appsScriptUrl);
+      
+      // Auto-sync in background so student/other devices have fresh Google Sheets data
+      setAutoSyncing(true);
+      DatabaseService.pullFromGoogleSheets()
+        .then((res) => {
+          if (res.success) {
+            console.log('Background auto-sync with Google Sheets completed.');
+            setSyncTrigger((prev) => prev + 1);
+          }
+        })
+        .catch((err) => console.error('Background auto-sync failed', err))
+        .finally(() => setAutoSyncing(false));
     }
   }, [router]);
 
@@ -132,6 +145,13 @@ export default function Home() {
         onSyncComplete={triggerSyncUpdate}
         hideSyncButton={!!(selectedExam && activeExamLevel)}
       />
+
+      {autoSyncing && (
+        <div className="bg-indigo-600 text-white text-[11px] font-black py-2 px-4 flex items-center justify-center gap-2 animate-pulse shadow-inner uppercase tracking-wider">
+          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+          <span>Đang tự động tải dữ liệu mới nhất từ Google Sheets...</span>
+        </div>
+      )}
 
       {/* Main Container */}
       <main id="main-content-section" className="transition-all duration-300">
