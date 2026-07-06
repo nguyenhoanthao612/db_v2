@@ -9,7 +9,7 @@ import Header from '@/components/Header';
 import AuthModal from '@/components/AuthModal';
 import StudentDashboard from '@/components/StudentDashboard';
 import QuizPlayer from '@/components/QuizPlayer';
-import { Database, X, HelpCircle, FileSpreadsheet, RefreshCw, CheckCircle, WifiOff } from 'lucide-react';
+import { Database, X, HelpCircle, FileSpreadsheet, RefreshCw, CheckCircle, WifiOff, AlertTriangle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function Home() {
@@ -31,6 +31,13 @@ export default function Home() {
     message: '',
   });
 
+  // Preload and synchronization blockage states for students
+  const [preloadFinished, setPreloadFinished] = useState<boolean>(false);
+  const [preloadStep, setPreloadStep] = useState<number>(0);
+  // 0: Initial, 1: Connecting to Apps Script, 2: Syncing Exams, 3: Fetching Questions, 4: Complete, 5: Offline Fallback, 6: Local DB Mode
+  const [preloadProgress, setPreloadProgress] = useState<number>(0);
+  const [preloadError, setPreloadError] = useState<string>('');
+
   // 1. Initial page load mount logic (renders instantly from local cache)
   useEffect(() => {
     DatabaseService.initLocalStorage();
@@ -43,101 +50,169 @@ export default function Home() {
       setUserRole(storedRole as any);
       if (storedRole === 'Admin') {
         router.push('/admin/reports');
+      } else if (storedRole === 'Student') {
+        const isSynced = sessionStorage.getItem('ic3_full_synced') === 'true';
+        if (isSynced) {
+          setPreloadFinished(true);
+        }
       }
     }
   }, [router]);
 
-  // 2. Highly optimized progressive background sync logic (non-blocking)
+  // 2. Highly optimized progressive background sync & preload blocking logic
   useEffect(() => {
+    DatabaseService.initLocalStorage();
     const config = DatabaseService.getSyncConfig();
-    if (!config.appsScriptUrl) return;
+    const appsScriptUrl = config.appsScriptUrl;
+    setSettingsUrl(appsScriptUrl || '');
 
-    setSettingsUrl(config.appsScriptUrl);
+    if (!currentUser || userRole !== 'Student') {
+      // Background non-blocking sync for non-student or guests
+      const delayTimer = setTimeout(() => {
+        if (!currentUser) {
+          const isLoginSynced = sessionStorage.getItem('ic3_login_synced') === 'true';
+          if (isLoginSynced || !appsScriptUrl) return;
+          setSyncStatus('syncing');
+          DatabaseService.pullLoginData()
+            .then((res) => {
+              if (res.success) {
+                sessionStorage.setItem('ic3_login_synced', 'true');
+                setSyncTrigger((prev) => prev + 1);
+                setSyncStatus('success');
+                setTimeout(() => setSyncStatus('idle'), 3000);
+              } else {
+                setSyncStatus('error');
+                setTimeout(() => setSyncStatus('idle'), 4000);
+              }
+            })
+            .catch((err) => {
+              console.error('Login data sync error:', err);
+              setSyncStatus('error');
+              setTimeout(() => setSyncStatus('idle'), 4000);
+            });
+        } else if (userRole === 'Admin') {
+          const isFullSynced = sessionStorage.getItem('ic3_full_synced') === 'true';
+          if (isFullSynced || !appsScriptUrl) return;
+          setSyncStatus('syncing');
+          DatabaseService.pullFromGoogleSheets()
+            .then((res) => {
+              if (res.success) {
+                sessionStorage.setItem('ic3_full_synced', 'true');
+                setSyncTrigger((prev) => prev + 1);
+                setSyncStatus('success');
+                setTimeout(() => setSyncStatus('idle'), 3000);
+              } else {
+                setSyncStatus('error');
+                setTimeout(() => setSyncStatus('idle'), 4000);
+              }
+            })
+            .catch((err) => {
+              console.error('Admin sync failed:', err);
+              setSyncStatus('error');
+              setTimeout(() => setSyncStatus('idle'), 4000);
+            });
+        }
+      }, 1200);
+      return () => clearTimeout(delayTimer);
+    }
 
-    // Progressive syncing flags
-    const isLoginSynced = sessionStorage.getItem('ic3_login_synced') === 'true';
+    // --- STUDENT PRELOAD & SYNC LOGIC ---
     const isFullSynced = sessionStorage.getItem('ic3_full_synced') === 'true';
+    if (isFullSynced) {
+      setPreloadFinished(true);
+      return;
+    }
 
-    // Auto-sync completely in the background after page has successfully loaded/changed
-    const delayTimer = setTimeout(() => {
-      if (!currentUser) {
-        // A. If NOT logged in: Only pull basic login student/admin list (tiny payload, extremely fast)
-        if (isLoginSynced) return;
-        setSyncStatus('syncing');
-        DatabaseService.pullLoginData()
-          .then((res) => {
-            if (res.success) {
-              console.log('Background sync of user accounts completed.');
-              sessionStorage.setItem('ic3_login_synced', 'true');
-              setSyncTrigger((prev) => prev + 1);
-              setSyncStatus('success');
-              setTimeout(() => setSyncStatus('idle'), 3000);
-            } else {
-              setSyncStatus('error');
-              setTimeout(() => setSyncStatus('idle'), 4000);
-            }
-          })
-          .catch((err) => {
-            console.error('Login data sync error:', err);
-            setSyncStatus('error');
-            setTimeout(() => setSyncStatus('idle'), 4000);
-          });
-      } else if (userRole === 'Student') {
-        // B. If logged in as STUDENT: Sync exams & scores first, then pull questions in the background
-        if (isFullSynced) return;
-        setSyncStatus('syncing');
-        DatabaseService.pullDashboardData()
-          .then((res) => {
-            if (res.success) {
-              console.log('Background sync of student exams/scores completed. Now syncing questions bank...');
-              return DatabaseService.pullQuestionsData();
-            }
-            throw new Error('Dashboard sync failed');
-          })
-          .then((res) => {
-            if (res.success) {
-              console.log('Progressive background questions pull completed successfully.');
-              sessionStorage.setItem('ic3_full_synced', 'true');
-              setSyncTrigger((prev) => prev + 1);
-              setSyncStatus('success');
-              setTimeout(() => setSyncStatus('idle'), 3000);
-            } else {
-              setSyncStatus('error');
-              setTimeout(() => setSyncStatus('idle'), 4000);
-            }
-          })
-          .catch((err) => {
-            console.error('Student progressive sync failed:', err);
-            setSyncStatus('error');
-            setTimeout(() => setSyncStatus('idle'), 4000);
-          });
-      } else if (userRole === 'Admin') {
-        // C. If logged in as ADMIN: Pull all tables (Admins need full data view)
-        if (isFullSynced) return;
-        setSyncStatus('syncing');
-        DatabaseService.pullFromGoogleSheets()
-          .then((res) => {
-            if (res.success) {
-              console.log('Full background database sync completed.');
-              sessionStorage.setItem('ic3_full_synced', 'true');
-              setSyncTrigger((prev) => prev + 1);
-              setSyncStatus('success');
-              setTimeout(() => setSyncStatus('idle'), 3000);
-            } else {
-              setSyncStatus('error');
-              setTimeout(() => setSyncStatus('idle'), 4000);
-            }
-          })
-          .catch((err) => {
-            console.error('Admin sync failed:', err);
-            setSyncStatus('error');
-            setTimeout(() => setSyncStatus('idle'), 4000);
-          });
+    // A. Local DB mode if Apps Script is not configured
+    if (!appsScriptUrl) {
+      setPreloadStep(6);
+      setPreloadProgress(10);
+      const t1 = setTimeout(() => {
+        setPreloadProgress(50);
+        const t2 = setTimeout(() => {
+          setPreloadProgress(100);
+          setPreloadStep(4); // Ready
+          const t3 = setTimeout(() => {
+            setPreloadFinished(true);
+            sessionStorage.setItem('ic3_full_synced', 'true');
+          }, 600);
+        }, 500);
+      }, 400);
+
+      return () => {
+        clearTimeout(t1);
+      };
+    }
+
+    // B. Online Sync mode if Apps Script is configured
+    setPreloadStep(1); // Connecting...
+    setPreloadProgress(10);
+    setSyncStatus('syncing');
+
+    let isSubscribed = true;
+
+    const runOnlineSync = async () => {
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        if (!isSubscribed) return;
+
+        // Step 2: Syncing Exams & Scores
+        setPreloadStep(2);
+        setPreloadProgress(35);
+        const dashRes = await DatabaseService.pullDashboardData();
+        if (!isSubscribed) return;
+
+        if (!dashRes.success) {
+          throw new Error(dashRes.message || 'Lỗi kết nối hoặc đồng bộ danh sách đề thi.');
+        }
+
+        // Step 3: Fetching Questions
+        setPreloadStep(3);
+        setPreloadProgress(70);
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        if (!isSubscribed) return;
+
+        const qRes = await DatabaseService.pullQuestionsData();
+        if (!isSubscribed) return;
+
+        if (!qRes.success) {
+          throw new Error(qRes.message || 'Lỗi tải ngân hàng câu hỏi đề thi.');
+        }
+
+        // Step 4: Ready/Complete
+        setPreloadStep(4);
+        setPreloadProgress(100);
+        setSyncStatus('success');
+        setTimeout(() => {
+          if (isSubscribed) setSyncStatus('idle');
+        }, 3000);
+
+        setTimeout(() => {
+          if (isSubscribed) {
+            setPreloadFinished(true);
+            sessionStorage.setItem('ic3_full_synced', 'true');
+            setSyncTrigger((prev) => prev + 1);
+          }
+        }, 1200);
+
+      } catch (err: any) {
+        console.error('Student progressive sync failed:', err);
+        if (isSubscribed) {
+          setPreloadStep(5); // Offline Fallback
+          setPreloadProgress(100);
+          setPreloadError(err.message || 'Không thể kết nối tới Google Sheets.');
+          setSyncStatus('error');
+          setTimeout(() => setSyncStatus('idle'), 4000);
+        }
       }
-    }, 1200); // Gentle delay to allow the active route/page rendering to load fully
+    };
 
-    return () => clearTimeout(delayTimer);
-  }, [currentUser, userRole]);
+    runOnlineSync();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [currentUser, userRole, syncTrigger]);
 
   const handleLoginSuccess = (user: any, role: 'Admin' | 'Student') => {
     setCurrentUser(user);
@@ -147,6 +222,9 @@ export default function Home() {
     
     // Reset progressive flags on login to force background updates of dashboard/exams for the user
     sessionStorage.removeItem('ic3_full_synced');
+    setPreloadFinished(false);
+    setPreloadStep(0);
+    setPreloadProgress(0);
     setSyncTrigger((prev) => prev + 1);
 
     if (role === 'Admin') {
@@ -328,6 +406,164 @@ export default function Home() {
               className="flex items-center justify-center p-8"
             >
               <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </motion.div>
+          ) : !preloadFinished ? (
+            <motion.div
+              key="preload"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="max-w-md mx-auto px-4 py-16 sm:py-24"
+            >
+              <div id="preload-container" className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6 text-center">
+                {/* Visual Header / Logo */}
+                <div id="preload-logo" className="relative w-20 h-20 mx-auto flex items-center justify-center rounded-2xl bg-blue-50 text-blue-500 mb-2">
+                  <Database className="w-10 h-10" />
+                  {preloadStep !== 4 && preloadStep !== 5 && (
+                    <span className="absolute inset-0 rounded-2xl border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
+                  )}
+                  {preloadStep === 4 && (
+                    <div className="absolute -right-1 -bottom-1 bg-green-500 text-white rounded-full p-1 border-2 border-white">
+                      <CheckCircle className="w-4 h-4" />
+                    </div>
+                  )}
+                  {preloadStep === 5 && (
+                    <div className="absolute -right-1 -bottom-1 bg-amber-500 text-white rounded-full p-1 border-2 border-white">
+                      <AlertTriangle className="w-4 h-4" />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
+                    {preloadStep === 4 ? 'Đồng bộ hoàn tất!' : preloadStep === 5 ? 'Lỗi kết nối' : 'Đang chuẩn bị phòng thi'}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1 font-bold">
+                    {preloadStep === 4
+                      ? 'Dữ liệu đã sẵn sàng, chúc bạn thi tốt!'
+                      : preloadStep === 5
+                      ? 'Không thể tải đề thi mới từ Google Sheets'
+                      : 'Hệ thống đang đồng bộ dữ liệu đề thi & câu hỏi'}
+                  </p>
+                </div>
+
+                {/* Progress bar */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[11px] font-black text-slate-400 uppercase tracking-wider">
+                    <span>Tiến độ tải</span>
+                    <span className="text-blue-500">{preloadProgress}%</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden relative">
+                    <motion.div
+                      className={`h-full rounded-full bg-gradient-to-r ${
+                        preloadStep === 5 ? 'from-amber-400 to-amber-500' : 'from-blue-500 to-indigo-600'
+                      }`}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${preloadProgress}%` }}
+                      transition={{ duration: 0.3 }}
+                    />
+                  </div>
+                </div>
+
+                {/* Step indicators */}
+                {preloadStep !== 5 && preloadStep !== 6 && (
+                  <div className="text-left space-y-4 pt-2">
+                    {[
+                      { id: 1, name: 'Kết nối máy chủ Google Sheets', desc: 'Thiết lập đường truyền dữ liệu bảo mật' },
+                      { id: 2, name: 'Đồng bộ danh sách đề thi', desc: 'Nạp danh mục đề và cấu trúc câu hỏi' },
+                      { id: 3, name: 'Tải ngân hàng câu hỏi IC3 GS6', desc: 'Đồng bộ hình ảnh minh họa và giải thích' },
+                    ].map((s) => {
+                      const isPending = preloadStep < s.id;
+                      const isActive = preloadStep === s.id;
+                      const isCompleted = preloadStep > s.id;
+
+                      return (
+                        <div key={s.id} className="flex gap-3.5 items-start">
+                          <div className="shrink-0 mt-0.5">
+                            {isCompleted ? (
+                              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-green-50 border border-green-200">
+                                <CheckCircle className="w-3 text-green-500" />
+                              </div>
+                            ) : isActive ? (
+                              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-50 border border-blue-200">
+                                <RefreshCw className="w-3 text-blue-500 animate-spin" />
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-50 border border-slate-100">
+                                <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <h5 className={`text-xs font-black leading-tight ${isActive ? 'text-blue-600' : isCompleted ? 'text-slate-700' : 'text-slate-400'}`}>
+                              {s.name}
+                            </h5>
+                            <p className={`text-[10px] mt-0.5 font-bold ${isActive ? 'text-blue-500/80' : 'text-slate-400/85'}`}>
+                              {s.desc}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Step indicator for Local DB Mode */}
+                {preloadStep === 6 && (
+                  <div className="text-left space-y-4 pt-2">
+                    <div className="flex gap-3.5 items-start">
+                      <div className="shrink-0 mt-0.5">
+                        <RefreshCw className="w-5 h-5 text-blue-500 animate-spin" />
+                      </div>
+                      <div>
+                        <h5 className="text-xs font-black text-blue-600">Đang nạp Cơ sở dữ liệu Cục bộ (Local DB)</h5>
+                        <p className="text-[10px] mt-0.5 font-bold text-slate-400">
+                          Chạy ngoại tuyến cực nhanh, tối ưu tài nguyên thiết bị
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error handling block */}
+                {preloadStep === 5 && (
+                  <div className="space-y-4 text-left pt-2">
+                    <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex gap-3 items-start">
+                      <div className="bg-amber-100 p-1.5 rounded-xl shrink-0">
+                        <WifiOff className="w-5 h-5 text-amber-600" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-extrabold text-amber-800">Không kết nối được Sheets</h4>
+                        <p className="text-[11px] leading-relaxed text-amber-700 font-bold">
+                          {preloadError || 'Hãy kiểm tra lại đường truyền internet hoặc cấu hình Apps Script.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setPreloadStep(1);
+                          setPreloadProgress(10);
+                          setSyncTrigger((prev) => prev + 1);
+                        }}
+                        className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black transition cursor-pointer text-center"
+                      >
+                        Thử lại
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPreloadFinished(true);
+                          sessionStorage.setItem('ic3_full_synced', 'true');
+                        }}
+                        className="flex-[2] py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-black transition shadow cursor-pointer text-center"
+                      >
+                        Vào phòng thi (Ngoại tuyến)
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </motion.div>
           ) : (
             <motion.div
