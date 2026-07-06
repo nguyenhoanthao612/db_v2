@@ -911,7 +911,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
               {/* Content */}
               <div>
-                <h3 className="text-base sm:text-lg font-extrabold text-slate-800 leading-relaxed">
+                <h3 className="text-base sm:text-lg font-extrabold text-slate-800 leading-relaxed whitespace-pre-wrap">
                   {currentQ.QuestionContent}
                 </h3>
               </div>
@@ -2256,7 +2256,9 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                   <p className="font-extrabold flex items-center gap-1.5 text-xs mb-1">
                     <HelpCircle className="w-4 h-4 text-blue-500" /> Giải thích chi tiết câu hỏi:
                   </p>
-                  {currentQ.Explanation}
+                  <p className="whitespace-pre-wrap mt-1">
+                    {currentQ.Explanation}
+                  </p>
                 </div>
               )}
             </div>
@@ -2672,7 +2674,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                   <span className="text-[10px] font-black uppercase tracking-wider text-blue-500 block mb-1">
                     Giải thích chi tiết:
                   </span>
-                  <p className="text-xs text-blue-900 leading-relaxed font-semibold">
+                  <p className="text-xs text-blue-900 leading-relaxed font-semibold whitespace-pre-wrap">
                     {currentQ.Explanation}
                   </p>
                 </div>
