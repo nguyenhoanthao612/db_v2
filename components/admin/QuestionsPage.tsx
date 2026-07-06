@@ -206,7 +206,54 @@ export default function QuestionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncTrigger, qOffset, qSearch, qLevelFilter, qExamFilter, qTypeFilter]);
 
-  const handleOpenQModal = (q: Question | null = null) => {
+  const computeNextQId = useCallback(async (level: string, examId: string) => {
+    try {
+      const res = await DatabaseService.getQuestions();
+      const allQ = res.questions || [];
+      
+      const groupQ = allQ.filter(
+        (q) => q.Level === level && q.ExamID === examId
+      );
+      
+      let maxNum = 0;
+      if (groupQ.length > 0) {
+        groupQ.forEach((q) => {
+          const match = q.QuestionID.match(/Q(\d+)/i);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > maxNum) maxNum = num;
+          }
+        });
+        return `Q${String(maxNum + 1).padStart(3, '0')}`;
+      } else {
+        let globalMaxNum = 0;
+        allQ.forEach((q) => {
+          const match = q.QuestionID.match(/Q(\d+)/i);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > globalMaxNum) globalMaxNum = num;
+          }
+        });
+        return `Q${String(globalMaxNum + 1).padStart(3, '0')}`;
+      }
+    } catch (e) {
+      console.error('Error computing next QId', e);
+      return `Q${String(totalQuestionsCount + 1).padStart(3, '0')}`;
+    }
+  }, [totalQuestionsCount]);
+
+  // Dynamic recalculation of QuestionID when Level or ExamID is changed inside the creation modal
+  useEffect(() => {
+    if (showQModal && !editingQ && qLevel && qExamID && qExamID.trim()) {
+      const updateQId = async () => {
+        const nextQId = await computeNextQId(qLevel, qExamID.trim());
+        setQId(nextQId);
+      };
+      updateQId();
+    }
+  }, [showQModal, editingQ, qLevel, qExamID, computeNextQId]);
+
+  const handleOpenQModal = async (q: Question | null = null) => {
     setParseStatus('');
     setParseError('');
     if (q) {
@@ -281,9 +328,16 @@ export default function QuestionsPage() {
       }
     } else {
       setEditingQ(null);
-      setQId(`Q${String(totalQuestionsCount + 1).padStart(3, '0')}`);
-      setQExamID('OT1');
-      setQLevel('LV1');
+      
+      const defaultLevel = (qLevelFilter as 'LV1' | 'LV2' | 'LV3') || 'LV1';
+      const defaultExamID = qExamFilter || 'OT1';
+      
+      setQExamID(defaultExamID);
+      setQLevel(defaultLevel);
+      
+      const nextQId = await computeNextQId(defaultLevel, defaultExamID);
+      setQId(nextQId);
+      
       setQType('Multiple Choice');
       setQContent('');
       setQExplanation('');
