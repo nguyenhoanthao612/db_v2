@@ -170,6 +170,7 @@ export default function QuestionsPage() {
 
   // Parse state (AI/Auto parser)
   const [parseStatus, setParseStatus] = useState('');
+  const [parseError, setParseError] = useState('');
 
   // Loading States
   const [loadingQuestions, setLoadingQuestions] = useState(false);
@@ -207,6 +208,7 @@ export default function QuestionsPage() {
 
   const handleOpenQModal = (q: Question | null = null) => {
     setParseStatus('');
+    setParseError('');
     if (q) {
       setEditingQ(q);
       setQId(q.QuestionID);
@@ -310,9 +312,76 @@ export default function QuestionsPage() {
     setShowQModal(true);
   };
 
+  const getValidationError = () => {
+    if (!qContent.trim()) {
+      return 'Thiếu nội dung câu hỏi.';
+    }
+
+    if (qType === 'Multiple Choice' || qType === 'Video Based') {
+      const activeOptions = mcOptions.filter(o => o.trim() !== '');
+      if (activeOptions.length < 2) {
+        return 'Câu hỏi trắc nghiệm cần tối thiểu 2 đáp án.';
+      }
+
+      const seen = new Set<string>();
+      for (const opt of mcOptions) {
+        const trimmed = opt.trim().toLowerCase();
+        if (trimmed) {
+          if (seen.has(trimmed)) {
+            return 'Có đáp án trùng nhau.';
+          }
+          seen.add(trimmed);
+        }
+      }
+
+      const hasEmpty = mcOptions.some(opt => !opt.trim());
+      if (hasEmpty) {
+        return 'Có ký hiệu đáp án sai định dạng hoặc đáp án bị để trống.';
+      }
+
+      if (correctMcIndex < 0 || correctMcIndex >= mcOptions.length) {
+        return 'Không tìm thấy đáp án đúng.';
+      }
+    } else if (qType === 'Multiple Response') {
+      const activeOptions = mrOptions.filter(o => o.trim() !== '');
+      if (activeOptions.length < 2) {
+        return 'Câu hỏi trắc nghiệm cần tối thiểu 2 đáp án.';
+      }
+
+      const seen = new Set<string>();
+      for (const opt of mrOptions) {
+        const trimmed = opt.trim().toLowerCase();
+        if (trimmed) {
+          if (seen.has(trimmed)) {
+            return 'Có đáp án trùng nhau.';
+          }
+          seen.add(trimmed);
+        }
+      }
+
+      const hasEmpty = mrOptions.some(opt => !opt.trim());
+      if (hasEmpty) {
+        return 'Có ký hiệu đáp án sai định dạng hoặc đáp án bị để trống.';
+      }
+
+      if (correctMrIndices.length === 0) {
+        return 'Không tìm thấy đáp án đúng.';
+      }
+    }
+
+    return '';
+  };
+
   const handleSaveQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!qId || !qContent) return;
+
+    const validationMsg = getValidationError();
+    if (validationMsg) {
+      setParseError(validationMsg);
+      alert(`Không thể lưu câu hỏi. Lỗi kiểm tra:\n- ${validationMsg}`);
+      return;
+    }
 
     setActionLoading(true);
 
@@ -461,84 +530,214 @@ export default function QuestionsPage() {
     setDraggingSpot(null);
   };
 
-  // Auto parsing questions written in text
+  // Smart automatic parsing of pasted questions and answers
+  const runSmartParser = (textToParse: string) => {
+    if (!textToParse || !textToParse.trim()) return;
+
+    setParseStatus('Đang tự động phân tích định dạng...');
+    setParseError('');
+
+    try {
+      const optionRegex = /^\s*(?:([a-zA-Z0-9]{1,2})\s*[.)\-:]|([①②③④⑤⑥⑦⑧⑨⑩]))\s*(.*)/i;
+      const answerLineRegex = /^\s*(?:Đáp án đúng|Correct|Đáp án|Answer)\s*:\s*(.*)/i;
+      const circledMap: Record<string, string> = {
+        '①': '1', '②': '2', '③': '3', '④': '4', '⑤': '5',
+        '⑥': '6', '⑦': '7', '⑧': '8', '⑨': '9', '⑩': '10'
+      };
+
+      const checkAndStripCorrect = (optionText: string) => {
+        const patterns = [
+          /\((?:Correct|correct|Đúng|đúng)\)/i,
+          /【(?:Correct|correct|Đúng|đúng)】/i,
+          /\[(?:Correct|correct|Đúng|đúng)\]/i,
+          /✔/g,
+          /✓/g,
+          /\s*[-–—:]\s*(?:Đáp án đúng|Correct|correct|Đúng|đúng)\s*$/i,
+          /\s*(?:Đáp án đúng)\s*$/i,
+        ];
+
+        let isCorrect = false;
+        let cleanText = optionText;
+
+        for (const pattern of patterns) {
+          if (pattern.test(cleanText)) {
+            isCorrect = true;
+            cleanText = cleanText.replace(pattern, '');
+          }
+        }
+
+        const tailPattern = /\s*\(?\s*(?:Correct|correct|Đáp án đúng|Đúng)\s*\)?\s*$/i;
+        if (tailPattern.test(cleanText)) {
+          const temp = cleanText.replace(tailPattern, '').trim();
+          if (temp.length > 0) {
+            isCorrect = true;
+            cleanText = temp;
+          }
+        }
+
+        cleanText = cleanText.trim().replace(/\s*[-–—:]\s*$/, '').trim();
+        return { isCorrect, cleanText };
+      };
+
+      const lines = textToParse.replace(/\r/g, '').split('\n');
+      let firstOptionIdx = -1;
+
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim() && optionRegex.test(lines[i])) {
+          firstOptionIdx = i;
+          break;
+        }
+      }
+
+      // If no options found, try to treat as standard content
+      if (firstOptionIdx === -1) {
+        setQContent(textToParse.trim());
+        setParseStatus('Không phát hiện danh sách lựa chọn. Đã cập nhật nội dung câu hỏi.');
+        setParseError('Không tìm thấy đáp án đúng.');
+        return;
+      }
+
+      const questionContent = lines.slice(0, firstOptionIdx).join('\n').trim();
+      
+      const parsedOptions: { prefix: string; text: string; isCorrect: boolean }[] = [];
+      const externalCorrectKeys: string[] = [];
+
+      for (let i = firstOptionIdx; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line.trim()) continue;
+
+        // Check if it's an answer key line
+        const ansMatch = line.match(answerLineRegex);
+        if (ansMatch) {
+          const keysStr = ansMatch[1];
+          const keys = keysStr.split(/[\s,&\/|]+/).map(k => k.trim().toUpperCase()).filter(Boolean);
+          externalCorrectKeys.push(...keys);
+          continue;
+        }
+
+        const match = line.match(optionRegex);
+        if (match) {
+          const prefix = (match[1] || match[2] || '').trim();
+          const rawText = (match[3] || '').trim();
+          const { isCorrect, cleanText } = checkAndStripCorrect(rawText);
+          parsedOptions.push({ prefix, text: cleanText, isCorrect });
+        } else {
+          // Continuation of last option
+          if (parsedOptions.length > 0) {
+            const { isCorrect, cleanText } = checkAndStripCorrect(line);
+            if (isCorrect) {
+              parsedOptions[parsedOptions.length - 1].isCorrect = true;
+              if (cleanText.trim()) {
+                parsedOptions[parsedOptions.length - 1].text += '\n' + cleanText.trim();
+              }
+            } else {
+              parsedOptions[parsedOptions.length - 1].text += '\n' + line.trim();
+            }
+          }
+        }
+      }
+
+      // Process external correct keys if any
+      if (externalCorrectKeys.length > 0) {
+        parsedOptions.forEach(opt => {
+          const normPrefix = (circledMap[opt.prefix] || opt.prefix).toUpperCase();
+          if (externalCorrectKeys.includes(normPrefix)) {
+            opt.isCorrect = true;
+          }
+        });
+      }
+
+      // Count correct options
+      const correctIndices = parsedOptions
+        .map((opt, idx) => (opt.isCorrect ? idx : -1))
+        .filter(idx => idx !== -1);
+
+      const correctCount = correctIndices.length;
+
+      // 1. Check Error: Thiếu nội dung câu hỏi
+      if (!questionContent) {
+        setParseError('Thiếu nội dung câu hỏi.');
+        setParseStatus('Phân tích thất bại!');
+        return;
+      }
+
+      // 2. Check Error: Không tìm thấy đáp án đúng
+      let currentError = '';
+      if (correctCount === 0) {
+        currentError = 'Không tìm thấy đáp án đúng.';
+      }
+
+      // 3. Check Error: Có đáp án trùng nhau
+      const seenTexts = new Set<string>();
+      let hasDuplicates = false;
+      parsedOptions.forEach(opt => {
+        const textNorm = opt.text.toLowerCase().trim();
+        if (textNorm) {
+          if (seenTexts.has(textNorm)) {
+            hasDuplicates = true;
+          }
+          seenTexts.add(textNorm);
+        }
+      });
+      if (hasDuplicates) {
+        currentError = currentError ? currentError + ' Có đáp án trùng nhau.' : 'Có đáp án trùng nhau.';
+      }
+
+      // 4. Check Error: Có ký hiệu đáp án sai định dạng (e.g. prefix is weird or contains empty option text)
+      const hasEmptyOption = parsedOptions.some(opt => !opt.text.trim());
+      if (hasEmptyOption) {
+        currentError = currentError ? currentError + ' Có ký hiệu đáp án sai định dạng.' : 'Có ký hiệu đáp án sai định dạng.';
+      }
+
+      if (currentError) {
+        setParseError(currentError);
+      }
+
+      // Determine type based on correct count
+      let detectedType: IC3QuestionType = 'Multiple Choice'; // Default is single selection (1 correct answer)
+      if (correctCount > 1) {
+        detectedType = 'Multiple Response';
+      }
+
+      // Update Form Fields
+      setQContent(questionContent);
+      setQType(detectedType);
+
+      const optionTexts = parsedOptions.map(opt => opt.text.trim());
+
+      if (detectedType === 'Multiple Choice') {
+        setMcOptions(optionTexts);
+        setCorrectMcIndex(correctIndices[0] ?? 0);
+      } else {
+        setMrOptions(optionTexts);
+        setCorrectMrIndices(correctIndices);
+      }
+
+      // Show success message if no errors
+      if (correctCount > 0 && !hasDuplicates && !hasEmptyOption) {
+        setParseStatus(
+          `Đã tự động phân tích thành công: ${parsedOptions.length} đáp án, tự động chọn loại ${
+            detectedType === 'Multiple Choice' ? 'Single Choice' : 'Multiple Choice'
+          }.`
+        );
+      } else {
+        setParseStatus('Phân tích có cảnh báo hoặc lỗi định dạng!');
+      }
+
+    } catch (err) {
+      console.error(err);
+      setParseStatus('Lỗi hệ thống khi phân tích cú pháp!');
+      setParseError('Lỗi hệ thống khi phân tích cú pháp!');
+    }
+  };
+
+  // Auto parsing questions button trigger
   const handleAutoParseContent = () => {
     if (!qContent.trim()) {
       alert('Vui lòng nhập nội dung câu hỏi trước khi phân tích!');
       return;
     }
-
-    setParseStatus('Đang tự động phân tích định dạng...');
-
-    try {
-      const text = qContent;
-
-      if (text.toLowerCase().includes('[matching]') || text.toLowerCase().includes('nối ý')) {
-        setQType('Matching');
-        const lines = text.split('\n').filter((l) => l.includes('-') || l.includes(':'));
-        const pairs = lines.map((l) => {
-          const parts = l.split(/[-:]/);
-          return {
-            left: parts[0]?.trim() || '',
-            right: parts[1]?.trim() || '',
-          };
-        });
-        if (pairs.length > 0) setMatchingPairs(pairs);
-        setParseStatus('Đã nhận diện & tự động chuyển đổi thành dạng Matching!');
-        return;
-      }
-
-      if (text.toLowerCase().includes('[sorting]') || text.toLowerCase().includes('sắp xếp')) {
-        setQType('Sequence Ordering');
-        const lines = text.split('\n').map((l) => l.replace(/^\d+[\s.)-]/, '').trim()).filter(Boolean);
-        if (lines.length > 1) setSequenceList(lines);
-        setParseStatus('Đã nhận diện & tự động chuyển đổi thành dạng Sequence Ordering!');
-        return;
-      }
-
-      if (text.toLowerCase().includes('[matrix]') || text.toLowerCase().includes('ma trận')) {
-        setQType('Matrix Selection');
-        setParseStatus('Đã nhận diện dạng Ma trận tuyển chọn!');
-        return;
-      }
-
-      const mcPattern = /[A-D][.\s)-]/i;
-      if (mcPattern.test(text)) {
-        const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-        const options: string[] = [];
-        let cleanQuestion = '';
-
-        lines.forEach((line) => {
-          const match = line.match(/^([A-D])([.\s)-]+)(.*)/i);
-          if (match) {
-            options.push(match[3].trim());
-          } else {
-            if (!line.toLowerCase().startsWith('đáp án') && !line.toLowerCase().startsWith('correct')) {
-              cleanQuestion += (cleanQuestion ? '\n' : '') + line;
-            }
-          }
-        });
-
-        if (options.length > 0) {
-          setMcOptions(options.concat(Array(Math.max(0, 4 - options.length)).fill('')));
-          setQType('Multiple Choice');
-
-          const ansMatch = text.match(/(?:đáp án|correct.*?):\s*([A-D])/i);
-          if (ansMatch) {
-            const char = ansMatch[1].toUpperCase();
-            const idx = char.charCodeAt(0) - 65;
-            if (idx >= 0 && idx < options.length) setCorrectMcIndex(idx);
-          }
-          setQContent(cleanQuestion || qContent);
-          setParseStatus('Đã tự động bóc tách thành công câu hỏi Trắc nghiệm Multiple Choice!');
-          return;
-        }
-      }
-
-      setParseStatus('Không phát hiện định dạng đặc biệt. Giữ nguyên Multiple Choice.');
-    } catch (err) {
-      setParseStatus('Lỗi phân tích cú pháp!');
-    }
+    runSmartParser(qContent);
   };
 
   return (
@@ -838,7 +1037,7 @@ export default function QuestionsPage() {
               {/* Question content textarea with Parse action */}
               <div>
                 <div className="flex justify-between items-center mb-1.5">
-                  <label className="text-[10px] text-slate-400 uppercase">NỘI DUNG CÂU HỎI & ĐÁP ÁN</label>
+                  <label className="text-[10px] text-slate-400 uppercase">NỘI DUNG CÂU HỎI & ĐÁP ÁN (DÁN TOÀN BỘ ĐỂ TỰ ĐỘNG PHÂN TÍCH)</label>
                   <button
                     type="button"
                     onClick={handleAutoParseContent}
@@ -851,13 +1050,32 @@ export default function QuestionsPage() {
                 <textarea
                   rows={4}
                   required
-                  placeholder="Nhập nội dung câu hỏi..."
+                  placeholder="Nhập nội dung câu hỏi, hoặc dán toàn bộ Câu hỏi kèm các đáp án a. b. c. d. (Correct) vào đây..."
                   value={qContent}
                   onChange={(e) => setQContent(e.target.value)}
+                  onPaste={(e) => {
+                    const pastedText = e.clipboardData.getData('text');
+                    if (pastedText) {
+                      // Small timeout to allow input value to be set, but we directly parse the clipboard text
+                      runSmartParser(pastedText);
+                    }
+                  }}
                   className="w-full px-3.5 py-3 border border-slate-200 rounded-2xl focus:outline-none text-slate-700 bg-slate-50/50 leading-relaxed font-bold"
                 />
                 {parseStatus && (
-                  <p className="text-[10px] text-blue-500 font-bold mt-1 animate-pulse">{parseStatus}</p>
+                  <p className={`text-[10px] font-bold mt-1 ${parseError ? 'text-red-500 font-black' : 'text-blue-500 animate-pulse'}`}>{parseStatus}</p>
+                )}
+                {parseError && (
+                  <div className="mt-2 p-3 bg-red-50 border border-red-100 rounded-2xl text-[11px] text-red-600 font-bold leading-relaxed space-y-1">
+                    <p className="flex items-center gap-1">
+                      <span>⚠️ Lỗi/Cảnh báo định dạng:</span>
+                    </p>
+                    <ul className="list-disc pl-4 space-y-0.5">
+                      {parseError.split('.').map(err => err.trim()).filter(Boolean).map((err, i) => (
+                        <li key={i}>{err}.</li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
 
