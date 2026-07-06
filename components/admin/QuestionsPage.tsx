@@ -1056,7 +1056,7 @@ export default function QuestionsPage() {
                   onPaste={(e) => {
                     const pastedText = e.clipboardData.getData('text');
                     if (pastedText) {
-                      // Small timeout to allow input value to be set, but we directly parse the clipboard text
+                      e.preventDefault();
                       runSmartParser(pastedText);
                     }
                   }}
