@@ -442,105 +442,54 @@ export default function Home() {
       <main id="main-content-section" className="transition-all duration-300">
         <AnimatePresence mode="wait">
           {!currentUser ? (
-            !loginPreloadFinished ? (
-              <motion.div
-                key="login-preload"
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                className="max-w-md mx-auto px-4 py-16 sm:py-24"
-              >
-                <div id="login-preload-container" className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6 text-center">
-                  {/* Visual Header / Logo */}
-                  <div id="login-preload-logo" className="relative w-20 h-20 mx-auto flex items-center justify-center rounded-2xl bg-blue-50 text-blue-500 mb-2">
-                    <Database className="w-10 h-10 text-blue-500" />
-                    {loginPreloadStep !== 4 && (
-                      <span className="absolute inset-0 rounded-2xl border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
-                    )}
-                    {loginPreloadStep === 4 && (
-                      <div className="absolute -right-1 -bottom-1 bg-green-500 text-white rounded-full p-1 border-2 border-white">
-                        <CheckCircle className="w-4 h-4" />
-                      </div>
-                    )}
-                  </div>
+            <motion.div
+              key="auth-section"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="relative min-h-[500px]"
+            >
+              {/* AuthModal container - blurred and translucent during preload */}
+              <div className={`transition-all duration-700 ease-out ${
+                !loginPreloadFinished
+                  ? "filter blur-md opacity-30 scale-95 select-none pointer-events-none"
+                  : "filter blur-0 opacity-100 scale-100"
+              }`}>
+                <AuthModal onLoginSuccess={handleLoginSuccess} syncTrigger={syncTrigger} />
+              </div>
 
-                  <div>
-                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
-                      Đang chuẩn bị trang đăng nhập
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-1 font-bold">
-                      Hệ thống đang đồng bộ danh mục Trường & Lớp
-                    </p>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[11px] font-black text-slate-400 uppercase tracking-wider">
-                      <span>Tiến độ tải</span>
-                      <span className="text-blue-500">{loginPreloadProgress}%</span>
+              {/* High-fidelity Glassmorphism Progress Overlay */}
+              {!loginPreloadFinished && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="w-full max-w-sm mx-4 bg-white/95 backdrop-blur-md border border-slate-100 rounded-3xl p-6 shadow-2xl space-y-4 text-center pointer-events-auto"
+                  >
+                    <div className="relative w-14 h-14 mx-auto flex items-center justify-center rounded-2xl bg-blue-50 text-blue-500">
+                      <div className="w-10 h-10 rounded-full border-4 border-blue-500/15 border-t-blue-500 animate-spin" />
+                      <span className="absolute text-[10px] font-black font-mono text-blue-600">{loginPreloadProgress}%</span>
                     </div>
-                    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden relative">
-                      <motion.div
-                        className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-600"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${loginPreloadProgress}%` }}
-                        transition={{ duration: 0.15 }}
+                    <div>
+                      <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Đang tải trang đăng nhập
+                      </h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5 font-bold">
+                        Đồng bộ dữ liệu Trường & Lớp học...
+                      </p>
+                    </div>
+                    
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden relative">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-150"
+                        style={{ width: `${loginPreloadProgress}%` }}
                       />
                     </div>
-                  </div>
-
-                  {/* Step indicators */}
-                  <div className="text-left space-y-4 pt-2">
-                    {[
-                      { id: 1, name: 'Kết nối máy chủ Google Cloud', desc: 'Thiết lập đường truyền bảo mật' },
-                      { id: 2, name: 'Tải danh mục Trường & Lớp học', desc: 'Đồng bộ cơ sở dữ liệu mới nhất' },
-                      { id: 3, name: 'Khởi tạo form đăng nhập học sinh', desc: 'Tối ưu hóa giao diện thiết bị' },
-                    ].map((s) => {
-                      const isActive = loginPreloadStep === s.id;
-                      const isCompleted = loginPreloadStep > s.id;
-
-                      return (
-                        <div key={s.id} className="flex gap-3.5 items-start">
-                          <div className="shrink-0 mt-0.5">
-                            {isCompleted ? (
-                              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-green-50 border border-green-200">
-                                <CheckCircle className="w-3 text-green-500" />
-                              </div>
-                            ) : isActive ? (
-                              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-50 border border-blue-200">
-                                <RefreshCw className="w-3 text-blue-500 animate-spin" />
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-50 border border-slate-100">
-                                <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <h5 className={`text-xs font-black leading-tight ${isActive ? 'text-blue-600' : isCompleted ? 'text-slate-700' : 'text-slate-400'}`}>
-                              {s.name}
-                            </h5>
-                            <p className={`text-[10px] mt-0.5 font-bold ${isActive ? 'text-blue-500/80' : 'text-slate-400/85'}`}>
-                              {s.desc}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  </motion.div>
                 </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="auth"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-              >
-                <AuthModal onLoginSuccess={handleLoginSuccess} syncTrigger={syncTrigger} />
-              </motion.div>
-            )
+              )}
+            </motion.div>
           ) : selectedExam && activeExamLevel ? (
             <motion.div
               key="quiz"
