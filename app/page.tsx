@@ -188,6 +188,14 @@ export default function Home() {
           setPreloadError(err.message || 'Không thể kết nối tới Google Sheets.');
           setSyncStatus('error');
           setTimeout(() => setSyncStatus('idle'), 4000);
+          // Auto-unlock the dashboard after 1 second so students can work offline without any blocking modals
+          setTimeout(() => {
+            if (isSubscribed) {
+              setPreloadFinished(true);
+              sessionStorage.setItem('ic3_full_synced', 'true');
+              setSyncTrigger((prev) => prev + 1);
+            }
+          }, 1000);
         }
       }
     };
@@ -379,65 +387,6 @@ export default function Home() {
         hideSyncButton={!!(selectedExam && activeExamLevel)}
       />
 
-      {/* Floating Background Sync Status Toast (Non-blocking & Elegant in the Corner) */}
-      <AnimatePresence>
-        {syncStatus !== 'idle' && currentUser && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-            className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3.5 rounded-2xl shadow-xl border bg-white max-w-sm pointer-events-auto"
-            style={{
-              borderColor:
-                syncStatus === 'syncing'
-                  ? '#e2e8f0'
-                  : syncStatus === 'success'
-                  ? '#bbf7d0'
-                  : '#fecaca',
-              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
-            }}
-          >
-            {syncStatus === 'syncing' && (
-              <>
-                <div className="relative flex h-5 w-5 items-center justify-center">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                  <RefreshCw className="relative h-4 w-4 text-blue-500 animate-spin" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Đang cập nhật...</h4>
-                  <p className="text-[10px] text-slate-400 font-bold mt-0.5">Tải dữ liệu mới nhất từ Google Sheets</p>
-                </div>
-              </>
-            )}
-
-            {syncStatus === 'success' && (
-              <>
-                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-green-50">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-green-800 uppercase tracking-wider">Đồng bộ hoàn tất!</h4>
-                  <p className="text-[10px] text-green-600/85 font-bold mt-0.5">Hệ thống đã cập nhật dữ liệu mới nhất</p>
-                </div>
-              </>
-            )}
-
-            {syncStatus === 'error' && (
-              <>
-                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-50">
-                  <WifiOff className="h-4 w-4 text-amber-500" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-amber-800 uppercase tracking-wider">Chạy ngoại tuyến</h4>
-                  <p className="text-[10px] text-amber-600/85 font-bold mt-0.5">Không kết nối được Sheets - Dùng dữ liệu hiện tại</p>
-                </div>
-              </>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Main Container */}
       <main id="main-content-section" className="transition-all duration-300">
         <AnimatePresence mode="wait">
@@ -489,171 +438,13 @@ export default function Home() {
             >
               <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             </motion.div>
-          ) : !preloadFinished ? (
-            <motion.div
-              key="preload"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="max-w-md mx-auto px-4 py-16 sm:py-24"
-            >
-              <div id="preload-container" className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6 text-center">
-                {/* Visual Header / Logo */}
-                <div id="preload-logo" className="relative w-20 h-20 mx-auto flex items-center justify-center rounded-2xl bg-blue-50 text-blue-500 mb-2">
-                  <Database className="w-10 h-10" />
-                  {preloadStep !== 4 && preloadStep !== 5 && (
-                    <span className="absolute inset-0 rounded-2xl border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
-                  )}
-                  {preloadStep === 4 && (
-                    <div className="absolute -right-1 -bottom-1 bg-green-500 text-white rounded-full p-1 border-2 border-white">
-                      <CheckCircle className="w-4 h-4" />
-                    </div>
-                  )}
-                  {preloadStep === 5 && (
-                    <div className="absolute -right-1 -bottom-1 bg-amber-500 text-white rounded-full p-1 border-2 border-white">
-                      <AlertTriangle className="w-4 h-4" />
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
-                    {preloadStep === 4 ? 'Đồng bộ hoàn tất!' : preloadStep === 5 ? 'Lỗi kết nối' : 'Đang chuẩn bị phòng thi'}
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1 font-bold">
-                    {preloadStep === 4
-                      ? 'Dữ liệu đã sẵn sàng, chúc bạn thi tốt!'
-                      : preloadStep === 5
-                      ? 'Không thể tải đề thi mới từ Google Sheets'
-                      : 'Hệ thống đang đồng bộ dữ liệu đề thi & câu hỏi'}
-                  </p>
-                </div>
-
-                {/* Progress bar */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-[11px] font-black text-slate-400 uppercase tracking-wider">
-                    <span>Tiến độ tải</span>
-                    <span className="text-blue-500">{preloadProgress}%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden relative">
-                    <motion.div
-                      className={`h-full rounded-full bg-gradient-to-r ${
-                        preloadStep === 5 ? 'from-amber-400 to-amber-500' : 'from-blue-500 to-indigo-600'
-                      }`}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${preloadProgress}%` }}
-                      transition={{ duration: 0.3 }}
-                    />
-                  </div>
-                </div>
-
-                {/* Step indicators */}
-                {preloadStep !== 5 && preloadStep !== 6 && (
-                  <div className="text-left space-y-4 pt-2">
-                    {[
-                      { id: 1, name: 'Kết nối máy chủ Google Sheets', desc: 'Thiết lập đường truyền dữ liệu bảo mật' },
-                      { id: 2, name: 'Đồng bộ danh sách đề thi', desc: 'Nạp danh mục đề và cấu trúc câu hỏi' },
-                      { id: 3, name: 'Tải ngân hàng câu hỏi IC3 GS6', desc: 'Đồng bộ hình ảnh minh họa và giải thích' },
-                    ].map((s) => {
-                      const isPending = preloadStep < s.id;
-                      const isActive = preloadStep === s.id;
-                      const isCompleted = preloadStep > s.id;
-
-                      return (
-                        <div key={s.id} className="flex gap-3.5 items-start">
-                          <div className="shrink-0 mt-0.5">
-                            {isCompleted ? (
-                              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-green-50 border border-green-200">
-                                <CheckCircle className="w-3 text-green-500" />
-                              </div>
-                            ) : isActive ? (
-                              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-50 border border-blue-200">
-                                <RefreshCw className="w-3 text-blue-500 animate-spin" />
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-50 border border-slate-100">
-                                <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <h5 className={`text-xs font-black leading-tight ${isActive ? 'text-blue-600' : isCompleted ? 'text-slate-700' : 'text-slate-400'}`}>
-                              {s.name}
-                            </h5>
-                            <p className={`text-[10px] mt-0.5 font-bold ${isActive ? 'text-blue-500/80' : 'text-slate-400/85'}`}>
-                              {s.desc}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Step indicator for Local DB Mode */}
-                {preloadStep === 6 && (
-                  <div className="text-left space-y-4 pt-2">
-                    <div className="flex gap-3.5 items-start">
-                      <div className="shrink-0 mt-0.5">
-                        <RefreshCw className="w-5 h-5 text-blue-500 animate-spin" />
-                      </div>
-                      <div>
-                        <h5 className="text-xs font-black text-blue-600">Đang nạp Cơ sở dữ liệu Cục bộ (Local DB)</h5>
-                        <p className="text-[10px] mt-0.5 font-bold text-slate-400">
-                          Chạy ngoại tuyến cực nhanh, tối ưu tài nguyên thiết bị
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Error handling block */}
-                {preloadStep === 5 && (
-                  <div className="space-y-4 text-left pt-2">
-                    <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex gap-3 items-start">
-                      <div className="bg-amber-100 p-1.5 rounded-xl shrink-0">
-                        <WifiOff className="w-5 h-5 text-amber-600" />
-                      </div>
-                      <div className="space-y-1">
-                        <h4 className="text-xs font-extrabold text-amber-800">Không kết nối được Sheets</h4>
-                        <p className="text-[11px] leading-relaxed text-amber-700 font-bold">
-                          {preloadError || 'Hãy kiểm tra lại đường truyền internet hoặc cấu hình Apps Script.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setPreloadStep(1);
-                          setPreloadProgress(10);
-                          setSyncTrigger((prev) => prev + 1);
-                        }}
-                        className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black transition cursor-pointer text-center"
-                      >
-                        Thử lại
-                      </button>
-                      <button
-                        onClick={() => {
-                          setPreloadFinished(true);
-                          sessionStorage.setItem('ic3_full_synced', 'true');
-                        }}
-                        className="flex-[2] py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-black transition shadow cursor-pointer text-center"
-                      >
-                        Vào phòng thi (Ngoại tuyến)
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </motion.div>
           ) : (
             <motion.div
               key="student"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: 1.0 }}
             >
               <StudentDashboard
                 student={currentUser}
@@ -663,6 +454,9 @@ export default function Home() {
                   setSelectedMode(mode);
                 }}
                 syncTrigger={syncTrigger}
+                preloadFinished={preloadFinished}
+                preloadStep={preloadStep}
+                preloadProgress={preloadProgress}
               />
             </motion.div>
           )}

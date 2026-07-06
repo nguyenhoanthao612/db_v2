@@ -140,11 +140,11 @@ export class DatabaseService {
     try {
       const [studentsRes, adminRes] = await Promise.all([
         this.callAppsScript('getTable', { table: 'Student' }).catch((e) => {
-          console.error('Error fetching Student table in background', e);
+          console.warn('Error fetching Student table in background', e);
           return null;
         }),
         this.callAppsScript('getTable', { table: 'Admin' }).catch((e) => {
-          console.error('Error fetching Admin table in background', e);
+          console.warn('Error fetching Admin table in background', e);
           return null;
         }),
       ]);
@@ -158,7 +158,7 @@ export class DatabaseService {
 
       return { success: true, message: 'Đồng bộ dữ liệu tài khoản thành công!' };
     } catch (error: any) {
-      console.error('Pull login data failed', error);
+      console.warn('Pull login data failed', error);
       return { success: false, message: `Thất bại: ${error.message || error}` };
     }
   }
@@ -173,11 +173,11 @@ export class DatabaseService {
     try {
       const [examRes, scoresRes] = await Promise.all([
         this.callAppsScript('getExams').catch((e) => {
-          console.error('Error fetching Exams list in background', e);
+          console.warn('Error fetching Exams list in background', e);
           return null;
         }),
         this.callAppsScript('getTable', { table: 'Score' }).catch((e) => {
-          console.error('Error fetching Score table in background', e);
+          console.warn('Error fetching Score table in background', e);
           return null;
         }),
       ]);
@@ -207,7 +207,7 @@ export class DatabaseService {
 
       return { success: true, message: 'Đồng bộ dữ liệu đề thi và điểm số thành công!' };
     } catch (error: any) {
-      console.error('Pull dashboard data failed', error);
+      console.warn('Pull dashboard data failed', error);
       return { success: false, message: `Thất bại: ${error.message || error}` };
     }
   }
@@ -221,7 +221,7 @@ export class DatabaseService {
 
     try {
       const questionsRes = await this.callAppsScript('getTable', { table: 'Questions' }).catch((e) => {
-        console.error('Error fetching Questions table in background', e);
+        console.warn('Error fetching Questions table in background', e);
         return null;
       });
 
@@ -236,7 +236,7 @@ export class DatabaseService {
 
       return { success: false, message: 'Không lấy được ngân hàng câu hỏi hoặc dữ liệu trống.' };
     } catch (error: any) {
-      console.error('Pull questions data failed', error);
+      console.warn('Pull questions data failed', error);
       return { success: false, message: `Thất bại: ${error.message || error}` };
     }
   }
@@ -274,11 +274,11 @@ export class DatabaseService {
       if (!examRes || !questionsRes) {
         console.log('Initiating parallel fallback sync...');
         const [eRes, qRes, sRes, scRes, aRes] = await Promise.all([
-          this.callAppsScript('getExams').catch(e => { console.error('Error fetching exams', e); return null; }),
-          this.callAppsScript('getTable', { table: 'Questions' }).catch(e => { console.error('Error fetching Questions table', e); return null; }),
-          this.callAppsScript('getTable', { table: 'Student' }).catch(e => { console.error('Error fetching Student table', e); return null; }),
-          this.callAppsScript('getTable', { table: 'Score' }).catch(e => { console.error('Error fetching Score table', e); return null; }),
-          this.callAppsScript('getTable', { table: 'Admin' }).catch(e => { console.error('Error fetching Admin table', e); return null; }),
+          this.callAppsScript('getExams').catch(e => { console.warn('Error fetching exams', e); return null; }),
+          this.callAppsScript('getTable', { table: 'Questions' }).catch(e => { console.warn('Error fetching Questions table', e); return null; }),
+          this.callAppsScript('getTable', { table: 'Student' }).catch(e => { console.warn('Error fetching Student table', e); return null; }),
+          this.callAppsScript('getTable', { table: 'Score' }).catch(e => { console.warn('Error fetching Score table', e); return null; }),
+          this.callAppsScript('getTable', { table: 'Admin' }).catch(e => { console.warn('Error fetching Admin table', e); return null; }),
         ]);
         examRes = eRes;
         questionsRes = qRes;

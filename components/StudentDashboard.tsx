@@ -3,16 +3,26 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseService } from '@/lib/database-service';
 import { Exam, ScoreRecord } from '@/lib/types';
-import { BookOpen, Trophy, Award, Clock, ArrowRight, CheckCircle2, XCircle, ChevronRight, Activity, Calendar, X, Zap } from 'lucide-react';
+import { BookOpen, Trophy, Award, Clock, ArrowRight, CheckCircle2, XCircle, ChevronRight, Activity, Calendar, X, Zap, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface StudentDashboardProps {
   student: any;
   onSelectExam: (exam: Exam, level: 'LV1' | 'LV2' | 'LV3', mode: 'training' | 'testing' | 'race') => void;
   syncTrigger: number;
+  preloadFinished?: boolean;
+  preloadStep?: number;
+  preloadProgress?: number;
 }
 
-export default function StudentDashboard({ student, onSelectExam, syncTrigger }: StudentDashboardProps) {
+export default function StudentDashboard({
+  student,
+  onSelectExam,
+  syncTrigger,
+  preloadFinished = true,
+  preloadStep = 4,
+  preloadProgress = 100,
+}: StudentDashboardProps) {
   const [exams, setExams] = useState<Exam[]>([]);
   const [scores, setScores] = useState<ScoreRecord[]>([]);
   const [loading, setLoading] = useState(false); // Default to false since we load instantly from cache
@@ -88,7 +98,14 @@ export default function StudentDashboard({ student, onSelectExam, syncTrigger }:
   const filteredExams = selectedLevel === 'ALL' ? exams : exams.filter((e) => e.Level === selectedLevel);
 
   return (
-    <div id="student-dashboard" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-fade-in">
+    <div 
+      id="student-dashboard" 
+      className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 transition-all duration-1000 ease-out ${
+        !preloadFinished
+          ? 'filter blur-md opacity-25 pointer-events-none select-none scale-[0.98]'
+          : 'filter blur-none opacity-100 pointer-events-auto scale-100'
+      }`}
+    >
       {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden shadow-lg shadow-blue-100">
         <div className="absolute -right-16 -top-16 w-48 h-48 bg-white/10 rounded-full blur-2xl" />
@@ -249,13 +266,27 @@ export default function StudentDashboard({ student, onSelectExam, syncTrigger }:
                     </div>
 
                     <button
+                      disabled={!preloadFinished}
                       onClick={() => {
                         setSelectedExamForMode(exam);
                         setActiveModeSelection('training');
                       }}
-                      className="mt-5 w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1 transition shadow-sm hover:shadow-md cursor-pointer"
+                      className={`mt-5 w-full py-2.5 text-xs font-bold rounded-xl flex items-center justify-center gap-1 transition-all duration-300 shadow-sm ${
+                        !preloadFinished
+                          ? 'bg-slate-100 text-slate-400 cursor-not-allowed pointer-events-none'
+                          : 'bg-blue-500 hover:bg-blue-600 text-white hover:shadow-md cursor-pointer'
+                      }`}
                     >
-                      Bắt đầu làm bài <ChevronRight className="w-4 h-4" />
+                      {!preloadFinished ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                          Đang tải câu hỏi...
+                        </>
+                      ) : (
+                        <>
+                          Bắt đầu làm bài <ChevronRight className="w-4 h-4" />
+                        </>
+                      )}
                     </button>
                   </div>
                 );
