@@ -19,6 +19,8 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionsShuffledOptions, setQuestionsShuffledOptions] = useState<Record<string, number[]>>({});
   const [loading, setLoading] = useState(true);
+  const [prepProgress, setPrepProgress] = useState<number>(0);
+  const [prepStep, setPrepStep] = useState<number>(1);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answersState, setAnswersState] = useState<Record<string, any>>({}); // Map QuestionID -> Student's answer
   const [flaggedQuestions, setFlaggedQuestions] = useState<Record<string, boolean>>({}); // Map QuestionID -> Flagged status
@@ -285,14 +287,19 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
   // Load questions
   useEffect(() => {
+    let isSubscribed = true;
     async function fetchQuestions() {
       setLoading(true);
+      setPrepStep(1);
+      setPrepProgress(10);
       try {
         // Fetch all questions for this exam
         const { questions: allQs } = await DatabaseService.getQuestions({
           level,
           examId: exam.ExamID,
         });
+
+        if (!isSubscribed) return;
 
         // Match exactly the order in the Exam's questionIDs list
         const orderedQs = exam.QuestionIDs.map((id) => allQs.find((q) => q.QuestionID === id)).filter(Boolean) as Question[];
@@ -347,13 +354,61 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
           }
         });
         setAnswersState(initialAnswers);
+
+        // Run progressive simulated preparation loader:
+        setPrepStep(1);
+        setPrepProgress(15);
+        
+        let progress = 15;
+        const interval = setInterval(() => {
+          if (!isSubscribed) {
+            clearInterval(interval);
+            return;
+          }
+          if (progress < 95) {
+            progress += Math.floor(Math.random() * 12) + 6;
+            if (progress > 95) progress = 95;
+            
+            // Set preparation steps based on progress
+            if (progress < 30) {
+              setPrepStep(1);
+            } else if (progress < 60) {
+              setPrepStep(2);
+            } else if (progress < 85) {
+              setPrepStep(3);
+            } else {
+              setPrepStep(4);
+            }
+            
+            setPrepProgress(progress);
+          }
+        }, 120);
+
+        // Complete transition
+        setTimeout(() => {
+          clearInterval(interval);
+          if (!isSubscribed) return;
+          setPrepProgress(100);
+          setPrepStep(4);
+          
+          setTimeout(() => {
+            if (isSubscribed) {
+              setLoading(false);
+            }
+          }, 350);
+        }, 900);
+
       } catch (e) {
         console.error(e);
-      } finally {
-        setLoading(false);
+        if (isSubscribed) {
+          setLoading(false);
+        }
       }
     }
     fetchQuestions();
+    return () => {
+      isSubscribed = false;
+    };
   }, [exam, level, mode, syncTrigger]);
 
   const [shuffledImageIndices, setShuffledImageIndices] = useState<number[]>([]);
@@ -727,9 +782,92 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px]">
-        <RefreshCw className="w-10 h-10 text-blue-500 animate-spin" />
-        <p className="mt-3 text-sm font-bold text-slate-500">Đang khởi tạo đề thi IC3...</p>
+      <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.98 }}
+          className="w-full max-w-md bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6 text-center"
+        >
+          {/* Visual Header / Logo */}
+          <div className="relative w-20 h-20 mx-auto flex items-center justify-center rounded-2xl bg-blue-50 text-blue-500 mb-2">
+            <Clock className="w-10 h-10 text-blue-500 animate-pulse" />
+            {prepProgress < 100 && (
+              <span className="absolute inset-0 rounded-2xl border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
+            )}
+            {prepProgress === 100 && (
+              <div className="absolute -right-1 -bottom-1 bg-green-500 text-white rounded-full p-1 border-2 border-white">
+                <Check className="w-4 h-4" />
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
+              {prepProgress === 100 ? 'Sẵn sàng làm bài!' : 'Đang chuẩn bị đề thi'}
+            </h3>
+            <p className="text-xs text-slate-400 mt-1 font-bold">
+              {prepProgress === 100 ? 'Đề thi đã được thiết lập thành công.' : 'Hệ thống đang định hình cấu trúc phòng thi'}
+            </p>
+          </div>
+
+          {/* Progress bar */}
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-[11px] font-black text-slate-400 uppercase tracking-wider">
+              <span>Tiến độ thiết lập</span>
+              <span className="text-blue-500 font-extrabold">{prepProgress}%</span>
+            </div>
+            <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden relative">
+              <motion.div
+                className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-600"
+                initial={{ width: 0 }}
+                animate={{ width: `${prepProgress}%` }}
+                transition={{ duration: 0.15 }}
+              />
+            </div>
+          </div>
+
+          {/* Step indicators */}
+          <div className="text-left space-y-4 pt-2">
+            {[
+              { id: 1, name: 'Nạp nội dung và hình ảnh câu hỏi', desc: 'Đồng bộ dữ liệu đa phương tiện' },
+              { id: 2, name: 'Cấu hình quy chế thi & chế độ làm bài', desc: `Chế độ: ${mode === 'training' ? 'Luyện tập' : mode === 'testing' ? 'Thi thử' : 'Sinh tử'}` },
+              { id: 3, name: 'Xáo trộn ngẫu nhiên câu hỏi & đáp án', desc: 'Đảm bảo tính trung thực khách quan' },
+              { id: 4, name: 'Thiết lập bảng ghi nhận kết quả', desc: 'Sẵn sàng lưu điểm vào Google Sheets' },
+            ].map((s) => {
+              const isActive = prepStep === s.id;
+              const isCompleted = prepStep > s.id;
+
+              return (
+                <div key={s.id} className="flex gap-3.5 items-start">
+                  <div className="shrink-0 mt-0.5">
+                    {isCompleted ? (
+                      <div className="flex items-center justify-center w-5 h-5 rounded-full bg-green-50 border border-green-200">
+                        <Check className="w-3 text-green-500" />
+                      </div>
+                    ) : isActive ? (
+                      <div className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-50 border border-blue-200">
+                        <RefreshCw className="w-3 text-blue-500 animate-spin" />
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-50 border border-slate-100">
+                        <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <h5 className={`text-xs font-black leading-tight ${isActive ? 'text-blue-600' : isCompleted ? 'text-slate-700' : 'text-slate-400'}`}>
+                      {s.name}
+                    </h5>
+                    <p className={`text-[10px] mt-0.5 font-bold ${isActive ? 'text-blue-500/80' : 'text-slate-400/85'}`}>
+                      {s.desc}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
       </div>
     );
   }

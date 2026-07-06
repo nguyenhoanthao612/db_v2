@@ -38,6 +38,11 @@ export default function Home() {
   const [preloadProgress, setPreloadProgress] = useState<number>(0);
   const [preloadError, setPreloadError] = useState<string>('');
 
+  // Login preloading states
+  const [loginPreloadFinished, setLoginPreloadFinished] = useState<boolean>(false);
+  const [loginPreloadStep, setLoginPreloadStep] = useState<number>(0);
+  const [loginPreloadProgress, setLoginPreloadProgress] = useState<number>(0);
+
   // 1. Initial page load mount logic (renders instantly from local cache)
   useEffect(() => {
     DatabaseService.initLocalStorage();
@@ -67,30 +72,9 @@ export default function Home() {
     setSettingsUrl(appsScriptUrl || '');
 
     if (!currentUser || userRole !== 'Student') {
-      // Background non-blocking sync for non-student or guests
-      const delayTimer = setTimeout(() => {
-        if (!currentUser) {
-          const isLoginSynced = sessionStorage.getItem('ic3_login_synced') === 'true';
-          if (isLoginSynced || !appsScriptUrl) return;
-          setSyncStatus('syncing');
-          DatabaseService.pullLoginData()
-            .then((res) => {
-              if (res.success) {
-                sessionStorage.setItem('ic3_login_synced', 'true');
-                setSyncTrigger((prev) => prev + 1);
-                setSyncStatus('success');
-                setTimeout(() => setSyncStatus('idle'), 3000);
-              } else {
-                setSyncStatus('error');
-                setTimeout(() => setSyncStatus('idle'), 4000);
-              }
-            })
-            .catch((err) => {
-              console.error('Login data sync error:', err);
-              setSyncStatus('error');
-              setTimeout(() => setSyncStatus('idle'), 4000);
-            });
-        } else if (userRole === 'Admin') {
+      // Background non-blocking sync for admin only
+      if (userRole === 'Admin') {
+        const delayTimer = setTimeout(() => {
           const isFullSynced = sessionStorage.getItem('ic3_full_synced') === 'true';
           if (isFullSynced || !appsScriptUrl) return;
           setSyncStatus('syncing');
@@ -111,9 +95,10 @@ export default function Home() {
               setSyncStatus('error');
               setTimeout(() => setSyncStatus('idle'), 4000);
             });
-        }
-      }, 1200);
-      return () => clearTimeout(delayTimer);
+        }, 1200);
+        return () => clearTimeout(delayTimer);
+      }
+      return;
     }
 
     // --- STUDENT PRELOAD & SYNC LOGIC ---
@@ -214,6 +199,95 @@ export default function Home() {
     };
   }, [currentUser, userRole, syncTrigger]);
 
+  // 2b. Highly stylized Login Page Preloader
+  useEffect(() => {
+    if (currentUser) return;
+
+    const config = DatabaseService.getSyncConfig();
+    const appsScriptUrl = config.appsScriptUrl;
+    const isLoginSynced = sessionStorage.getItem('ic3_login_synced') === 'true';
+
+    // A. Local DB mode or already synced - fast elegant simulated load (650ms) to look cohesive
+    if (isLoginSynced || !appsScriptUrl) {
+      setLoginPreloadStep(1);
+      setLoginPreloadProgress(15);
+      const t1 = setTimeout(() => {
+        setLoginPreloadStep(2);
+        setLoginPreloadProgress(50);
+        const t2 = setTimeout(() => {
+          setLoginPreloadStep(3);
+          setLoginPreloadProgress(85);
+          const t3 = setTimeout(() => {
+            setLoginPreloadProgress(100);
+            setLoginPreloadStep(4);
+            const t4 = setTimeout(() => {
+              setLoginPreloadFinished(true);
+            }, 300);
+          }, 200);
+        }, 150);
+      }, 150);
+      return () => {
+        clearTimeout(t1);
+      };
+    }
+
+    // B. Online Sync mode - Actual pull with visual preparation progress bar
+    setLoginPreloadStep(1);
+    setLoginPreloadProgress(10);
+    setSyncStatus('syncing');
+
+    let isSubscribed = true;
+
+    const runLoginPreload = async () => {
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        if (!isSubscribed) return;
+
+        setLoginPreloadStep(2);
+        setLoginPreloadProgress(50);
+
+        const res = await DatabaseService.pullLoginData();
+        if (!isSubscribed) return;
+
+        if (res.success) {
+          sessionStorage.setItem('ic3_login_synced', 'true');
+          setSyncStatus('success');
+          setTimeout(() => setSyncStatus('idle'), 3000);
+        } else {
+          console.warn('Login pull failed, running offline fallback');
+        }
+
+        setLoginPreloadStep(3);
+        setLoginPreloadProgress(85);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        if (!isSubscribed) return;
+
+        setLoginPreloadProgress(100);
+        setLoginPreloadStep(4);
+        
+        setTimeout(() => {
+          if (isSubscribed) {
+            setLoginPreloadFinished(true);
+            setSyncTrigger((prev) => prev + 1);
+          }
+        }, 300);
+
+      } catch (err) {
+        console.error('Login preloader error:', err);
+        if (isSubscribed) {
+          setLoginPreloadProgress(100);
+          setLoginPreloadFinished(true);
+        }
+      }
+    };
+
+    runLoginPreload();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [currentUser, syncTrigger]);
+
   const handleLoginSuccess = (user: any, role: 'Admin' | 'Student') => {
     setCurrentUser(user);
     setUserRole(role);
@@ -237,6 +311,7 @@ export default function Home() {
     setUserRole(null);
     setSelectedExam(null);
     setActiveExamLevel(null);
+    setLoginPreloadFinished(false);
     sessionStorage.removeItem('ic3_current_user');
     sessionStorage.removeItem('ic3_user_role');
   };
@@ -306,7 +381,7 @@ export default function Home() {
 
       {/* Floating Background Sync Status Toast (Non-blocking & Elegant in the Corner) */}
       <AnimatePresence>
-        {syncStatus !== 'idle' && (
+        {syncStatus !== 'idle' && currentUser && (
           <motion.div
             initial={{ opacity: 0, y: 50, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -367,15 +442,105 @@ export default function Home() {
       <main id="main-content-section" className="transition-all duration-300">
         <AnimatePresence mode="wait">
           {!currentUser ? (
-            <motion.div
-              key="auth"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-            >
-              <AuthModal onLoginSuccess={handleLoginSuccess} syncTrigger={syncTrigger} />
-            </motion.div>
+            !loginPreloadFinished ? (
+              <motion.div
+                key="login-preload"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                className="max-w-md mx-auto px-4 py-16 sm:py-24"
+              >
+                <div id="login-preload-container" className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6 text-center">
+                  {/* Visual Header / Logo */}
+                  <div id="login-preload-logo" className="relative w-20 h-20 mx-auto flex items-center justify-center rounded-2xl bg-blue-50 text-blue-500 mb-2">
+                    <Database className="w-10 h-10 text-blue-500" />
+                    {loginPreloadStep !== 4 && (
+                      <span className="absolute inset-0 rounded-2xl border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
+                    )}
+                    {loginPreloadStep === 4 && (
+                      <div className="absolute -right-1 -bottom-1 bg-green-500 text-white rounded-full p-1 border-2 border-white">
+                        <CheckCircle className="w-4 h-4" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
+                      Đang chuẩn bị trang đăng nhập
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1 font-bold">
+                      Hệ thống đang đồng bộ danh mục Trường & Lớp
+                    </p>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[11px] font-black text-slate-400 uppercase tracking-wider">
+                      <span>Tiến độ tải</span>
+                      <span className="text-blue-500">{loginPreloadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden relative">
+                      <motion.div
+                        className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-600"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${loginPreloadProgress}%` }}
+                        transition={{ duration: 0.15 }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Step indicators */}
+                  <div className="text-left space-y-4 pt-2">
+                    {[
+                      { id: 1, name: 'Kết nối máy chủ Google Cloud', desc: 'Thiết lập đường truyền bảo mật' },
+                      { id: 2, name: 'Tải danh mục Trường & Lớp học', desc: 'Đồng bộ cơ sở dữ liệu mới nhất' },
+                      { id: 3, name: 'Khởi tạo form đăng nhập học sinh', desc: 'Tối ưu hóa giao diện thiết bị' },
+                    ].map((s) => {
+                      const isActive = loginPreloadStep === s.id;
+                      const isCompleted = loginPreloadStep > s.id;
+
+                      return (
+                        <div key={s.id} className="flex gap-3.5 items-start">
+                          <div className="shrink-0 mt-0.5">
+                            {isCompleted ? (
+                              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-green-50 border border-green-200">
+                                <CheckCircle className="w-3 text-green-500" />
+                              </div>
+                            ) : isActive ? (
+                              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-50 border border-blue-200">
+                                <RefreshCw className="w-3 text-blue-500 animate-spin" />
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-50 border border-slate-100">
+                                <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <h5 className={`text-xs font-black leading-tight ${isActive ? 'text-blue-600' : isCompleted ? 'text-slate-700' : 'text-slate-400'}`}>
+                              {s.name}
+                            </h5>
+                            <p className={`text-[10px] mt-0.5 font-bold ${isActive ? 'text-blue-500/80' : 'text-slate-400/85'}`}>
+                              {s.desc}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="auth"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                <AuthModal onLoginSuccess={handleLoginSuccess} syncTrigger={syncTrigger} />
+              </motion.div>
+            )
           ) : selectedExam && activeExamLevel ? (
             <motion.div
               key="quiz"
