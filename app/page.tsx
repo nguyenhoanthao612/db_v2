@@ -449,46 +449,14 @@ export default function Home() {
               exit={{ opacity: 0 }}
               className="relative min-h-[500px]"
             >
-              {/* AuthModal container - blurred and translucent during preload */}
-              <div className={`transition-all duration-700 ease-out ${
+              {/* AuthModal container - blurred and translucent during preload, then transitions to crisp and fully interactive */}
+              <div className={`transition-all duration-1000 ease-out ${
                 !loginPreloadFinished
-                  ? "filter blur-md opacity-30 scale-95 select-none pointer-events-none"
-                  : "filter blur-0 opacity-100 scale-100"
+                  ? "filter blur-md opacity-25 scale-95 select-none pointer-events-none"
+                  : "filter blur-0 opacity-100 scale-100 pointer-events-auto"
               }`}>
                 <AuthModal onLoginSuccess={handleLoginSuccess} syncTrigger={syncTrigger} />
               </div>
-
-              {/* High-fidelity Glassmorphism Progress Overlay */}
-              {!loginPreloadFinished && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="w-full max-w-sm mx-4 bg-white/95 backdrop-blur-md border border-slate-100 rounded-3xl p-6 shadow-2xl space-y-4 text-center pointer-events-auto"
-                  >
-                    <div className="relative w-14 h-14 mx-auto flex items-center justify-center rounded-2xl bg-blue-50 text-blue-500">
-                      <div className="w-10 h-10 rounded-full border-4 border-blue-500/15 border-t-blue-500 animate-spin" />
-                      <span className="absolute text-[10px] font-black font-mono text-blue-600">{loginPreloadProgress}%</span>
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                        Đang tải trang đăng nhập
-                      </h3>
-                      <p className="text-[10px] text-slate-400 mt-0.5 font-bold">
-                        Đồng bộ dữ liệu Trường & Lớp học...
-                      </p>
-                    </div>
-                    
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden relative">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-150"
-                        style={{ width: `${loginPreloadProgress}%` }}
-                      />
-                    </div>
-                  </motion.div>
-                </div>
-              )}
             </motion.div>
           ) : selectedExam && activeExamLevel ? (
             <motion.div

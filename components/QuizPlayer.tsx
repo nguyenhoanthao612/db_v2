@@ -782,10 +782,16 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
   if (loading && questions.length === 0) {
     return (
-      <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center p-4">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-blue-500/10 border-t-blue-500 rounded-full animate-spin" />
-          <p className="text-xs font-bold text-slate-400">Đang khởi tạo...</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-pulse select-none pointer-events-none">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          <div className="lg:col-span-3 space-y-6">
+            <div className="h-16 bg-slate-100/75 rounded-2xl" />
+            <div className="h-96 bg-slate-100/75 rounded-3xl" />
+          </div>
+          <div className="space-y-6">
+            <div className="h-44 bg-slate-100/75 rounded-3xl" />
+            <div className="h-64 bg-slate-100/75 rounded-3xl" />
+          </div>
         </div>
       </div>
     );
@@ -839,11 +845,11 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
   return (
     <div className="relative min-h-[calc(100vh-8rem)]">
-      {/* Blurry main quiz interface */}
-      <div id="quiz-player" className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-all duration-700 ease-out ${
+      {/* Blurry main quiz interface - smoothly un-blurs and transitions as loading completes */}
+      <div id="quiz-player" className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-all duration-1000 ease-out ${
         loading
-          ? "filter blur-md opacity-30 scale-98 select-none pointer-events-none"
-          : "filter blur-0 opacity-100 scale-100"
+          ? "filter blur-md opacity-25 scale-95 select-none pointer-events-none"
+          : "filter blur-0 opacity-100 scale-100 pointer-events-auto"
       }`}>
         {!quizFinished || isReviewMode ? (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -2697,38 +2703,6 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
         </div>
       )}
       </div>
-
-      {/* Floating high-fidelity glassmorphism loader overlay */}
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="w-full max-w-sm mx-4 bg-white/95 backdrop-blur-md border border-slate-100 rounded-3xl p-6 shadow-2xl space-y-4 text-center pointer-events-auto animate-pulse"
-          >
-            <div className="relative w-14 h-14 mx-auto flex items-center justify-center rounded-2xl bg-blue-50 text-blue-500">
-              <div className="w-10 h-10 rounded-full border-4 border-blue-500/15 border-t-blue-500 animate-spin" />
-              <span className="absolute text-[10px] font-black font-mono text-blue-600">{prepProgress}%</span>
-            </div>
-            <div>
-              <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                Đang nạp đề thi
-              </h3>
-              <p className="text-[10px] text-slate-400 mt-0.5 font-bold">
-                Xáo trộn câu hỏi và đáp án...
-              </p>
-            </div>
-            
-            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden relative">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-150"
-                style={{ width: `${prepProgress}%` }}
-              />
-            </div>
-          </motion.div>
-        </div>
-      )}
     </div>
   );
 }
