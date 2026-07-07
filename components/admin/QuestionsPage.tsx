@@ -70,8 +70,8 @@ export default function QuestionsPage() {
   const [catItems, setCatItems] = useState<{ name: string; category: string }[]>([{ name: '', category: '' }]);
 
   // For Hotspots
-  const [hotspotsList, setHotspotsList] = useState<{ id: string; name: string; x: number; y: number; w: number; h: number; radius?: number; isCorrect?: boolean }[]>([
-    { id: 'hotspot_1', name: 'Nút A', x: 10, y: 10, w: 20, h: 20, radius: 10, isCorrect: true },
+  const [hotspotsList, setHotspotsList] = useState<{ id: string; name: string; x: number; y: number; w: number; h: number; radius?: number }[]>([
+    { id: 'hotspot_1', name: 'Nút A', x: 10, y: 10, w: 20, h: 20, radius: 10 },
   ]);
   const [correctHotspotId, setCorrectHotspotId] = useState('hotspot_1');
   const [selectedSpotId, setSelectedSpotId] = useState<string | null>('hotspot_1');
@@ -267,31 +267,15 @@ export default function QuestionsPage() {
         }));
         setCatItems(items);
       } else if (q.QuestionType === 'Hotspot') {
-        const hList = (parsed.hotspots || []).map((h) => {
-          let isCorrect = h.isCorrect;
-          if (isCorrect === undefined) {
-            if (q.CorrectAnswer && q.CorrectAnswer.startsWith('[')) {
-              try {
-                const arr = JSON.parse(q.CorrectAnswer);
-                isCorrect = arr.includes(h.id);
-              } catch (e) {
-                isCorrect = h.id === q.CorrectAnswer;
-              }
-            } else {
-              isCorrect = h.id === q.CorrectAnswer;
-            }
-          }
-          return {
-            id: h.id,
-            name: h.name,
-            x: h.x,
-            y: h.y,
-            w: h.width ?? 15,
-            h: h.height ?? 15,
-            radius: h.radius ?? Math.max(1, Math.round((h.width ?? 15) / 2)) ?? 15,
-            isCorrect: !!isCorrect,
-          };
-        });
+        const hList = (parsed.hotspots || []).map((h) => ({
+          id: h.id,
+          name: h.name,
+          x: h.x,
+          y: h.y,
+          w: h.width ?? 15,
+          h: h.height ?? 15,
+          radius: h.radius ?? Math.max(1, Math.round((h.width ?? 15) / 2)) ?? 15,
+        }));
         setHotspotsList(hList);
         setCorrectHotspotId(q.CorrectAnswer);
       } else if (q.QuestionType === 'Match Image To Text') {
@@ -336,7 +320,7 @@ export default function QuestionsPage() {
       setStmtRows([{ text: '', correct: true }]);
       setCatCategories(['Thiết bị Nhập (Input)', 'Thiết bị Xuất (Output)']);
       setCatItems([{ name: '', category: 'Thiết bị Nhập (Input)' }]);
-      setHotspotsList([{ id: 'hotspot_1', name: 'Nút A', x: 10, y: 10, w: 20, h: 20, isCorrect: true }]);
+      setHotspotsList([{ id: 'hotspot_1', name: 'Nút A', x: 10, y: 10, w: 20, h: 20 }]);
       setCorrectHotspotId('hotspot_1');
       setImgTextPairs([{ img: '', text: '' }]);
       setMatrixRows(['Row A', 'Row B']);
@@ -400,14 +384,6 @@ export default function QuestionsPage() {
 
       if (correctMrIndices.length === 0) {
         return 'Không tìm thấy đáp án đúng.';
-      }
-    } else if (qType === 'Hotspot') {
-      if (hotspotsList.length === 0) {
-        return 'Vui lòng thiết lập ít nhất một vùng chọn (Hotspot) trên ảnh.';
-      }
-      const correctCount = hotspotsList.filter(h => h.isCorrect).length;
-      if (correctCount === 0) {
-        return 'Vui lòng đánh dấu ít nhất một vùng chọn (Hotspot) là Đáp án đúng.';
       }
     }
 
@@ -477,10 +453,9 @@ export default function QuestionsPage() {
         width: h.w,
         height: h.h,
         radius: h.radius ?? Math.max(1, Math.round(h.w / 2)) ?? 15,
-        isCorrect: !!h.isCorrect,
       }));
       finalAnswersObj = { hotspots: hList };
-      finalCorrectAnswerStr = JSON.stringify(hotspotsList.filter((h) => h.isCorrect).map((h) => h.id));
+      finalCorrectAnswerStr = correctHotspotId;
     } else if (qType === 'Match Image To Text') {
       const textTargets = imgTextPairs.map((p) => p.text).filter(Boolean);
       const imageOptions = imgTextPairs.map((p) => p.img).filter(Boolean);
@@ -592,7 +567,6 @@ export default function QuestionsPage() {
         w: 0,
         h: 0,
         radius: 0,
-        isCorrect: true,
       },
     ]);
   };
@@ -1736,7 +1710,7 @@ export default function QuestionsPage() {
                         type="button"
                         onClick={() => {
                           const nid = `hotspot_${Date.now()}`;
-                          setHotspotsList([...hotspotsList, { id: nid, name: `Vùng ${hotspotsList.length + 1}`, x: 30, y: 30, w: 15, h: 15, isCorrect: true }]);
+                          setHotspotsList([...hotspotsList, { id: nid, name: `Vùng ${hotspotsList.length + 1}`, x: 30, y: 30, w: 15, h: 15 }]);
                           setSelectedSpotId(nid);
                         }}
                         className="text-[10px] text-blue-500 hover:underline cursor-pointer font-extrabold"
@@ -1744,9 +1718,10 @@ export default function QuestionsPage() {
                         + Thêm điểm nóng mới
                       </button>
                     </div>
- 
+
                     <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
                       {hotspotsList.map((h, idx) => {
+                        const isCorrect = correctHotspotId === h.id;
                         const isSelected = selectedSpotId === h.id;
                         return (
                           <div
@@ -1769,7 +1744,7 @@ export default function QuestionsPage() {
                               placeholder="Tên vùng"
                               className="w-24 px-2 py-1.5 border border-slate-200 rounded-lg text-slate-700 focus:outline-none text-xs font-bold"
                             />
- 
+
                             <div className="flex gap-2.5 text-[10px] text-slate-400 font-bold items-center">
                               <span>X: {Math.round(h.x)}%</span>
                               <span>Y: {Math.round(h.y)}%</span>
@@ -1802,30 +1777,20 @@ export default function QuestionsPage() {
                                 <span>%</span>
                               </div>
                             </div>
- 
+
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setHotspotsList(hotspotsList.map((spot) => (spot.id === h.id ? { ...spot, isCorrect: !spot.isCorrect } : spot)));
+                                setCorrectHotspotId(h.id);
                               }}
-                              className={`ml-auto px-2.5 py-1.5 text-[10px] rounded-lg border font-black transition cursor-pointer select-none flex items-center gap-1 ${
-                                h.isCorrect
+                              className={`ml-auto px-2 py-1.5 text-[10px] rounded-lg border font-black transition cursor-pointer select-none ${
+                                isCorrect
                                   ? 'bg-green-50 border-green-300 text-green-700 shadow-sm shadow-green-100/50'
-                                  : 'bg-red-50 border-red-200 text-red-600 hover:border-red-300'
+                                  : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
                               }`}
                             >
-                              {h.isCorrect ? (
-                                <>
-                                  <span className="text-green-600 font-extrabold text-xs">🟢</span>
-                                  <span>✓ Đáp án đúng</span>
-                                </>
-                              ) : (
-                                <>
-                                  <span className="text-red-500 font-extrabold text-xs">🔴</span>
-                                  <span>✕ Đáp án sai</span>
-                                </>
-                              )}
+                              {isCorrect ? '★ Đáp án đúng' : 'Đặt đáp án'}
                             </button>
 
                             <button
@@ -1888,6 +1853,7 @@ export default function QuestionsPage() {
                             {imageBounds && (
                               <div className="absolute inset-0 pointer-events-none">
                                 {hotspotsList.map((h, idx) => {
+                                  const isCorrect = correctHotspotId === h.id;
                                   const isSelected = selectedSpotId === h.id;
                                   
                                   const widthPct = h.w ?? 15;
@@ -1904,13 +1870,13 @@ export default function QuestionsPage() {
                                         height: `${heightPct}%`,
                                       }}
                                       className={`hotspot-rect absolute border-2 flex flex-col items-center justify-center transition-shadow shadow-md select-none rounded-lg cursor-move pointer-events-auto ${
-                                        h.isCorrect
+                                        isCorrect
                                           ? isSelected
                                             ? 'bg-green-500/35 border-green-500 border-[3px] ring-2 ring-green-400/50 shadow-green-200/50'
                                             : 'bg-green-500/20 border-green-500/90'
                                           : isSelected
-                                            ? 'bg-red-500/35 border-red-500 border-[3px] ring-2 ring-red-400/50 shadow-red-200/50'
-                                            : 'bg-red-500/20 border-red-500/90'
+                                            ? 'bg-blue-500/35 border-blue-500 border-[3px] ring-2 ring-blue-400/50 shadow-blue-200/50'
+                                            : 'bg-blue-500/20 border-blue-500/90'
                                       }`}
                                     >
                                       <span className="bg-slate-900/80 text-white text-[8px] font-black px-1 py-0.5 rounded pointer-events-none select-none">

@@ -19,7 +19,7 @@ export interface QuestionAnswers {
   statements?: string[]; // For True/False Multiple
   categories?: string[]; // For Categorization: Category Names
   categoryItems?: string[]; // For Categorization: Items to categorize
-  hotspots?: { id: string; name: string; x: number; y: number; width: number; height: number; radius?: number; isCorrect?: boolean }[]; // For Hotspot
+  hotspots?: { id: string; name: string; x: number; y: number; width: number; height: number; radius?: number }[]; // For Hotspot
   imageOptions?: string[]; // For Match Image To Text (URLs or placeholders)
   textTargets?: string[]; // For Match Image To Text
   matrixRows?: string[]; // For Matrix Selection

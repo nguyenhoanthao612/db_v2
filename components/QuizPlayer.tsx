@@ -534,75 +534,66 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
         try {
           const parsed: QuestionAnswers = JSON.parse(q.Answers);
           const rawHotspots = parsed.hotspots || [];
-          const hasAnyIsCorrectDefined = rawHotspots.some((h: any) => h.isCorrect === true || h.isCorrect === false);
-          const hotspotsList = rawHotspots.map((h: any) => {
-            let isCorrect = h.isCorrect;
-            if (!hasAnyIsCorrectDefined) {
-              if (correctAnsStr && correctAnsStr.startsWith('[')) {
-                try {
-                  const arr = JSON.parse(correctAnsStr);
-                  isCorrect = arr.includes(h.id);
-                } catch (e) {
-                  isCorrect = (h.id === correctAnsStr);
-                }
-              } else {
-                isCorrect = (h.id === correctAnsStr);
-              }
-            }
-            const hasRadius = h.radius !== undefined;
-            const w = h.width ?? h.w ?? 15;
-            const h_val = h.height ?? h.h ?? 15;
-            const radius = h.radius ?? Math.max(1, Math.round(w / 2));
-            return {
-              ...h,
-              isCorrect: !!isCorrect,
-              x: h.x,
-              y: h.y,
-              w: w,
-              h: h_val,
-              centerX: hasRadius ? h.x : h.x + w / 2,
-              centerY: hasRadius ? h.y : h.y + h_val / 2,
-              radius: radius,
-            };
-          });
-
           if (!Array.isArray(studentAnswer)) {
             return String(studentAnswer) === String(correctAnsStr);
           }
           const dots = studentAnswer as { x: number; y: number }[];
-          const correctHotspots = hotspotsList.filter((h: any) => h.isCorrect);
+          if (rawHotspots.length !== dots.length) return false;
 
-          if (correctHotspots.length !== dots.length) return false;
+          // Helper to check if a dot is inside a hotspot
+          const isInside = (dot: { x: number; y: number }, target: any): boolean => {
+            const w = target.width ?? target.w;
+            const h = target.height ?? target.h;
+            const hasDimensions = w !== undefined && h !== undefined;
 
-          const match = (hotspotIdx: number, usedDots: Set<number>): boolean => {
-            if (hotspotIdx === correctHotspots.length) return true;
-            const spot = correctHotspots[hotspotIdx] as any;
-            for (let i = 0; i < dots.length; i++) {
-              if (!usedDots.has(i)) {
-                const dot = dots[i];
-                const w = spot.width ?? spot.w;
-                const h = spot.height ?? spot.h;
-                let inside = false;
-                if (w !== undefined && h !== undefined) {
-                  inside = dot.x >= spot.x && dot.x <= (spot.x + w) &&
-                           dot.y >= spot.y && dot.y <= (spot.y + h);
-                } else {
-                  const radius = spot.radius || 15;
-                  const dist = Math.sqrt(Math.pow(dot.x - spot.centerX, 2) + Math.pow(dot.y - spot.centerY, 2));
-                  inside = dist <= radius;
-                }
-                if (inside) {
-                  usedDots.add(i);
-                  if (match(hotspotIdx + 1, usedDots)) {
-                    return true;
-                  }
-                  usedDots.delete(i);
+            if (hasDimensions) {
+              return dot.x >= target.x && dot.x <= (target.x + w) &&
+                     dot.y >= target.y && dot.y <= (target.y + h);
+            } else {
+              const hasRadius = target.radius !== undefined;
+              const w_val = w ?? 15;
+              const h_val = h ?? 15;
+              const radius = target.radius ?? Math.max(1, Math.round(w_val / 2));
+              const centerX = hasRadius ? target.x : target.x + w_val / 2;
+              const centerY = hasRadius ? target.y : target.y + h_val / 2;
+              const dist = Math.sqrt(Math.pow(dot.x - centerX, 2) + Math.pow(dot.y - centerY, 2));
+              return dist <= radius;
+            }
+          };
+
+          // Maximum bipartite matching using backtracking / DFS
+          const adj: number[][] = Array.from({ length: dots.length }, () => []);
+          for (let i = 0; i < dots.length; i++) {
+            for (let j = 0; j < rawHotspots.length; j++) {
+              if (isInside(dots[i], rawHotspots[j])) {
+                adj[i].push(j);
+              }
+            }
+          }
+
+          const match = Array(rawHotspots.length).fill(-1);
+          const dfs = (u: number, visited: boolean[]): boolean => {
+            for (const v of adj[u]) {
+              if (!visited[v]) {
+                visited[v] = true;
+                if (match[v] < 0 || dfs(match[v], visited)) {
+                  match[v] = u;
+                  return true;
                 }
               }
             }
             return false;
           };
-          return match(0, new Set());
+
+          let matchCount = 0;
+          for (let i = 0; i < dots.length; i++) {
+            const visited = Array(rawHotspots.length).fill(false);
+            if (dfs(i, visited)) {
+              matchCount++;
+            }
+          }
+
+          return matchCount === rawHotspots.length;
         } catch (e) {
           return String(studentAnswer) === String(correctAnsStr);
         }
@@ -1673,28 +1664,13 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                 {/* 9. HOTSPOT (Click Image Target Coordinate) */}
                 {currentQ.QuestionType === 'Hotspot' && parsedAnswers.hotspots && currentQ.Image && (() => {
                                   const rawHotspots = parsedAnswers.hotspots || [];
-                  const hasAnyIsCorrectDefined = rawHotspots.some((h: any) => h.isCorrect === true || h.isCorrect === false);
                   const hotspotsList = rawHotspots.map((h: any) => {
-                    let isCorrect = h.isCorrect;
-                    if (!hasAnyIsCorrectDefined) {
-                      if (currentQ.CorrectAnswer && currentQ.CorrectAnswer.startsWith('[')) {
-                        try {
-                          const arr = JSON.parse(currentQ.CorrectAnswer);
-                          isCorrect = arr.includes(h.id);
-                        } catch (e) {
-                          isCorrect = (h.id === currentQ.CorrectAnswer);
-                        }
-                      } else {
-                        isCorrect = (h.id === currentQ.CorrectAnswer);
-                      }
-                    }
                     const hasRadius = h.radius !== undefined;
                     const w = h.width ?? h.w ?? 15;
                     const h_val = h.height ?? h.h ?? 15;
                     const radius = h.radius ?? Math.max(1, Math.round(w / 2));
                     return {
                       ...h,
-                      isCorrect: !!isCorrect,
                       x: h.x,
                       y: h.y,
                       centerX: hasRadius ? h.x : h.x + w / 2,
@@ -1702,8 +1678,61 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                       radius: radius,
                     };
                   });
-                  const targetCount = hotspotsList.filter((h: any) => h.isCorrect).length || 1;
+                  const targetCount = hotspotsList.length;
                   const dots = Array.isArray(currentAnswer) ? currentAnswer : [];
+
+                  // Precompute bipartite matching for feedback dot highlighting
+                  const matchedDotIndices = new Set<number>();
+                  if (isFeedbackActive) {
+                    const isInside = (dot: any, target: any): boolean => {
+                      const w = target.width ?? target.w;
+                      const h = target.height ?? target.h;
+                      const hasDimensions = w !== undefined && h !== undefined;
+
+                      if (hasDimensions) {
+                        return dot.x >= target.x && dot.x <= (target.x + w) &&
+                               dot.y >= target.y && dot.y <= (target.y + h);
+                      } else {
+                        const radius = target.radius ?? 15;
+                        const dist = Math.sqrt(Math.pow(dot.x - target.centerX, 2) + Math.pow(dot.y - target.centerY, 2));
+                        return dist <= radius;
+                      }
+                    };
+
+                    const adj: number[][] = Array.from({ length: dots.length }, () => []);
+                    for (let i = 0; i < dots.length; i++) {
+                      for (let j = 0; j < hotspotsList.length; j++) {
+                        if (isInside(dots[i], hotspotsList[j])) {
+                          adj[i].push(j);
+                        }
+                      }
+                    }
+
+                    const match = Array(hotspotsList.length).fill(-1);
+                    const dfs = (u: number, visited: boolean[]): boolean => {
+                      for (const v of adj[u]) {
+                        if (!visited[v]) {
+                          visited[v] = true;
+                          if (match[v] < 0 || dfs(match[v], visited)) {
+                            match[v] = u;
+                            return true;
+                          }
+                        }
+                      }
+                      return false;
+                    };
+
+                    for (let i = 0; i < dots.length; i++) {
+                      const visited = Array(hotspotsList.length).fill(false);
+                      dfs(i, visited);
+                    }
+
+                    for (let j = 0; j < hotspotsList.length; j++) {
+                      if (match[j] !== -1) {
+                        matchedDotIndices.add(match[j]);
+                      }
+                    }
+                  }
 
                   return (
                     <div className="space-y-4">
@@ -1766,17 +1795,12 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                 const w = target.width ?? target.w;
                                 const h = target.height ?? target.h;
                                 const hasDimensions = w !== undefined && h !== undefined;
-                                const isCorrect = target.isCorrect;
 
                                 if (hasDimensions) {
                                   return (
                                     <div
                                       key={`target-${tIdx}`}
-                                      className={`absolute border-2 border-dashed rounded-lg flex items-center justify-center text-[10px] font-black animate-pulse pointer-events-none shadow px-1 ${
-                                        isCorrect
-                                          ? 'border-green-500 bg-green-500/15 text-green-600'
-                                          : 'border-red-500 bg-red-500/15 text-red-600'
-                                      }`}
+                                      className="absolute border-2 border-dashed border-green-500 bg-green-500/15 rounded-lg flex items-center justify-center text-[10px] font-black text-green-600 animate-pulse pointer-events-none shadow"
                                       style={{
                                         left: `${target.x}%`,
                                         top: `${target.y}%`,
@@ -1784,7 +1808,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                         height: `${h}%`,
                                       }}
                                     >
-                                      {isCorrect ? '✓' : '✕'} {target.name}
+                                      Vùng {tIdx + 1}
                                     </div>
                                   );
                                 }
@@ -1792,11 +1816,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                 return (
                                   <div
                                     key={`target-${tIdx}`}
-                                    className={`absolute border-2 border-dashed rounded-full flex items-center justify-center text-[10px] font-black animate-pulse pointer-events-none px-1 ${
-                                      isCorrect
-                                        ? 'border-green-500 bg-green-500/10 text-green-600'
-                                        : 'border-red-500 bg-red-500/10 text-red-600'
-                                    }`}
+                                    className="absolute border-2 border-dashed border-green-500 bg-green-500/10 rounded-full flex items-center justify-center text-[10px] font-black text-green-600 animate-pulse pointer-events-none"
                                     style={{
                                       left: `${target.centerX}%`,
                                       top: `${target.centerY}%`,
@@ -1805,7 +1825,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                       transform: 'translate(-50%, -50%)',
                                     }}
                                   >
-                                    {isCorrect ? '✓' : '✕'} {target.name}
+                                    Vùng {tIdx + 1}
                                   </div>
                                 );
                               })}
@@ -1814,25 +1834,8 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                               {dots.map((dot: any, dIdx: number) => {
                                 const isDragging = draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx;
                                 
-                                // Check if this dot is close enough to ANY CORRECT target hotspot
-                                let isDotCorrect = false;
-                                if (isFeedbackActive) {
-                                  isDotCorrect = hotspotsList.some((target: any) => {
-                                    if (!target.isCorrect) return false;
-                                    const w = target.width ?? target.w;
-                                    const h = target.height ?? target.h;
-                                    if (w !== undefined && h !== undefined) {
-                                      // Rectangular bounding box check
-                                      return dot.x >= target.x && dot.x <= (target.x + w) &&
-                                             dot.y >= target.y && dot.y <= (target.y + h);
-                                    } else {
-                                      // Fallback circle distance check
-                                      const radius = target.radius || 15;
-                                      const dist = Math.sqrt(Math.pow(dot.x - target.centerX, 2) + Math.pow(dot.y - target.centerY, 2));
-                                      return dist <= radius;
-                                    }
-                                  });
-                                }
+                                // Check if this dot matches a hotspot in the maximum bipartite matching
+                                const isDotCorrect = isFeedbackActive && matchedDotIndices.has(dIdx);
 
                                 return (
                                   <div
