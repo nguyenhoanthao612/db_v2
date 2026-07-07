@@ -74,6 +74,18 @@ export default function QuestionsPage() {
     { id: 'hotspot_1', name: 'Nút A', x: 10, y: 10, w: 20, h: 20, radius: 10 },
   ]);
   const [correctHotspotId, setCorrectHotspotId] = useState('hotspot_1');
+  const [selectedSpotId, setSelectedSpotId] = useState<string | null>('hotspot_1');
+  const [drawingStart, setDrawingStart] = useState<{ x: number; y: number } | null>(null);
+  const [resizingSpot, setResizingSpot] = useState<{
+    id: string;
+    handle: string;
+    startX: number;
+    startY: number;
+    startSpotX: number;
+    startSpotY: number;
+    startSpotW: number;
+    startSpotH: number;
+  } | null>(null);
   const [draggingSpot, setDraggingSpot] = useState<{
     id: string;
     startX: number;
@@ -546,11 +558,99 @@ export default function QuestionsPage() {
     setActionLoading(false);
   };
 
-  // Drag handles for Hotspot Editor
-  const handleSpotMouseDown = (e: React.MouseEvent, spotId: string) => {
+  // Drag handles and drawing for Hotspot Editor
+  const getRelativeCoords = (e: React.MouseEvent) => {
+    if (!imageRect) return null;
+    const container = document.getElementById('hotspot-editor-container');
+    if (!container) return null;
+    const rect = container.getBoundingClientRect();
+    
+    // Position relative to the image rect itself inside the container
+    const imgLeft = rect.left + imageRect.left;
+    const imgTop = rect.top + imageRect.top;
+    
+    const xPx = e.clientX - imgLeft;
+    const yPx = e.clientY - imgTop;
+    
+    // Percentage relative to displayed image dimensions
+    const xPct = (xPx / imageRect.width) * 100;
+    const yPct = (yPx / imageRect.height) * 100;
+    
+    return {
+      x: Math.max(0, Math.min(100, xPct)),
+      y: Math.max(0, Math.min(100, yPct)),
+    };
+  };
+
+  const getMinPct = () => {
+    if (!imageRect) return { w: 2, h: 2 };
+    return {
+      w: (20 / imageRect.width) * 100,
+      h: (20 / imageRect.height) * 100,
+    };
+  };
+
+  const handleContainerMouseDown = (e: React.MouseEvent) => {
     if (!imageRect) return;
+
+    // Check if clicked inside any hotspot or handle - if so, do not trigger drawing!
+    const target = e.target as HTMLElement;
+    if (target.closest('.hotspot-rect') || target.closest('.resize-handle')) {
+      return;
+    }
+
+    const coords = getRelativeCoords(e);
+    if (!coords) return;
+
+    const newId = `hotspot_${Date.now()}`;
+    const newName = `Vùng ${hotspotsList.length + 1}`;
+    
+    setDrawingStart({ x: coords.x, y: coords.y });
+    setSelectedSpotId(newId);
+    
+    setHotspotsList((prev) => [
+      ...prev,
+      {
+        id: newId,
+        name: newName,
+        x: coords.x,
+        y: coords.y,
+        w: 0,
+        h: 0,
+        radius: 0,
+      },
+    ]);
+  };
+
+  const handleResizeHandleMouseDown = (e: React.MouseEvent, spotId: string, handle: string) => {
+    e.stopPropagation();
+    if (!imageRect) return;
+
     const spot = hotspotsList.find((h) => h.id === spotId);
     if (!spot) return;
+
+    setSelectedSpotId(spotId);
+
+    setResizingSpot({
+      id: spotId,
+      handle,
+      startX: e.clientX,
+      startY: e.clientY,
+      startSpotX: spot.x,
+      startSpotY: spot.y,
+      startSpotW: spot.w ?? 15,
+      startSpotH: spot.h ?? 15,
+    });
+  };
+
+  const handleSpotMouseDown = (e: React.MouseEvent, spotId: string) => {
+    e.stopPropagation();
+    if (!imageRect) return;
+
+    const spot = hotspotsList.find((h) => h.id === spotId);
+    if (!spot) return;
+
+    setSelectedSpotId(spotId);
 
     setDraggingSpot({
       id: spotId,
@@ -564,24 +664,163 @@ export default function QuestionsPage() {
   };
 
   const handleSpotMouseMove = (e: React.MouseEvent) => {
-    if (!draggingSpot) return;
+    if (!imageRect) return;
 
-    const deltaX = e.clientX - draggingSpot.startX;
-    const deltaY = e.clientY - draggingSpot.startY;
+    if (resizingSpot) {
+      const deltaX = e.clientX - resizingSpot.startX;
+      const deltaY = e.clientY - resizingSpot.startY;
 
-    const pctX = (deltaX / draggingSpot.containerWidth) * 100;
-    const pctY = (deltaY / draggingSpot.containerHeight) * 100;
+      const deltaXPct = (deltaX / imageRect.width) * 100;
+      const deltaYPct = (deltaY / imageRect.height) * 100;
 
-    const newX = Math.round(Math.max(0, Math.min(100, draggingSpot.startSpotX + pctX)));
-    const newY = Math.round(Math.max(0, Math.min(100, draggingSpot.startSpotY + pctY)));
+      const minPct = getMinPct();
 
-    setHotspotsList((prev) =>
-      prev.map((h) => (h.id === draggingSpot.id ? { ...h, x: newX, y: newY } : h))
-    );
+      setHotspotsList((prev) =>
+        prev.map((h) => {
+          if (h.id !== resizingSpot.id) return h;
+
+          let newX = h.x;
+          let newY = h.y;
+          let newW = h.w ?? 15;
+          let newH = h.h ?? 15;
+
+          const handle = resizingSpot.handle;
+
+          // Horizontal Resize
+          if (handle.includes('e')) {
+            newW = Math.max(minPct.w, resizingSpot.startSpotW + deltaXPct);
+            if (resizingSpot.startSpotX + newW > 100) {
+              newW = 100 - resizingSpot.startSpotX;
+            }
+          } else if (handle.includes('w')) {
+            const potentialX = resizingSpot.startSpotX + deltaXPct;
+            const maxAllowedX = resizingSpot.startSpotX + resizingSpot.startSpotW - minPct.w;
+            newX = Math.max(0, Math.min(maxAllowedX, potentialX));
+            newW = resizingSpot.startSpotW - (newX - resizingSpot.startSpotX);
+          }
+
+          // Vertical Resize
+          if (handle.includes('s')) {
+            newH = Math.max(minPct.h, resizingSpot.startSpotH + deltaYPct);
+            if (resizingSpot.startSpotY + newH > 100) {
+              newH = 100 - resizingSpot.startSpotY;
+            }
+          } else if (handle.includes('n')) {
+            const potentialY = resizingSpot.startSpotY + deltaYPct;
+            const maxAllowedY = resizingSpot.startSpotY + resizingSpot.startSpotH - minPct.h;
+            newY = Math.max(0, Math.min(maxAllowedY, potentialY));
+            newH = resizingSpot.startSpotH - (newY - resizingSpot.startSpotY);
+          }
+
+          return {
+            ...h,
+            x: Math.round(newX * 10) / 10,
+            y: Math.round(newY * 10) / 10,
+            w: Math.round(newW * 10) / 10,
+            h: Math.round(newH * 10) / 10,
+            radius: Math.round((Math.max(newW, newH) / 2) * 10) / 10,
+          };
+        })
+      );
+      return;
+    }
+
+    if (draggingSpot) {
+      const deltaX = e.clientX - draggingSpot.startX;
+      const deltaY = e.clientY - draggingSpot.startY;
+
+      const deltaXPct = (deltaX / imageRect.width) * 100;
+      const deltaYPct = (deltaY / imageRect.height) * 100;
+
+      setHotspotsList((prev) =>
+        prev.map((h) => {
+          if (h.id !== draggingSpot.id) return h;
+
+          const spot = prev.find((x) => x.id === draggingSpot.id);
+          if (!spot) return h;
+
+          let newX = draggingSpot.startSpotX + deltaXPct;
+          let newY = draggingSpot.startSpotY + deltaYPct;
+
+          const wVal = h.w ?? 15;
+          const hVal = h.h ?? 15;
+
+          newX = Math.max(0, Math.min(100 - wVal, newX));
+          newY = Math.max(0, Math.min(100 - hVal, newY));
+
+          return {
+            ...h,
+            x: Math.round(newX * 10) / 10,
+            y: Math.round(newY * 10) / 10,
+          };
+        })
+      );
+      return;
+    }
+
+    if (drawingStart) {
+      const current = getRelativeCoords(e);
+      if (!current) return;
+
+      const xMin = Math.min(drawingStart.x, current.x);
+      const yMin = Math.min(drawingStart.y, current.y);
+      const w = Math.abs(drawingStart.x - current.x);
+      const h = Math.abs(drawingStart.y - current.y);
+
+      setHotspotsList((prev) => {
+        const activeId = selectedSpotId;
+        if (!activeId) return prev;
+
+        return prev.map((spot) => {
+          if (spot.id === activeId) {
+            return {
+              ...spot,
+              x: Math.round(xMin * 10) / 10,
+              y: Math.round(yMin * 10) / 10,
+              w: Math.round(w * 10) / 10,
+              h: Math.round(h * 10) / 10,
+              radius: Math.round((Math.max(w, h) / 2) * 10) / 10,
+            };
+          }
+          return spot;
+        });
+      });
+    }
   };
 
-  const handleSpotMouseUp = () => {
+  const handleSpotMouseUp = (e: React.MouseEvent) => {
+    if (drawingStart && selectedSpotId) {
+      const currentSpot = hotspotsList.find((h) => h.id === selectedSpotId);
+      if (currentSpot) {
+        const minPct = getMinPct();
+        if (currentSpot.w < minPct.w || currentSpot.h < minPct.h) {
+          const defW = 15;
+          const defH = 15;
+          const coords = getRelativeCoords(e) || { x: currentSpot.x, y: currentSpot.y };
+          const newX = Math.max(0, Math.min(100 - defW, coords.x - defW / 2));
+          const newY = Math.max(0, Math.min(100 - defH, coords.y - defH / 2));
+
+          setHotspotsList((prev) =>
+            prev.map((h) =>
+              h.id === selectedSpotId
+                ? {
+                    ...h,
+                    x: Math.round(newX * 10) / 10,
+                    y: Math.round(newY * 10) / 10,
+                    w: defW,
+                    h: defH,
+                    radius: Math.round((Math.max(defW, defH) / 2) * 10) / 10,
+                  }
+                : h
+            )
+          );
+        }
+      }
+    }
+
+    setDrawingStart(null);
     setDraggingSpot(null);
+    setResizingSpot(null);
   };
 
   // Smart automatic parsing of pasted questions and answers
@@ -1506,87 +1745,121 @@ export default function QuestionsPage() {
                 {qType === 'Hotspot' && (
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-[10px] text-slate-400">THIẾT LẬP ĐIỂM NÓNG TRỰC QUAN (HOTSPOT)</label>
-                      <p className="text-[11px] text-slate-400 font-bold mt-1">
+                      <label className="block text-[10px] text-slate-400 font-extrabold tracking-wider">THIẾT LẬP ĐIỂM NÓNG TRỰC QUAN (HOTSPOT)</label>
+                      <p className="text-[11px] text-slate-500 leading-relaxed font-semibold mt-1">
                         1. Điền link ảnh ở mục ảnh phía trên.<br />
-                        2. Nhấp &quot;+ Thêm điểm nóng&quot; để vẽ ô tương tác.<br />
-                        3. Kéo thả ô chấm đỏ trực tiếp trên khung ảnh xem trước bên dưới để căn chỉnh vị trí tọa độ (%).<br />
-                        4. Tích chọn điểm nào là Đáp Án Đúng cho câu hỏi này.
+                        2. <span className="text-blue-600 font-bold">Nhấn chuột trái lên ảnh và kéo</span> để tự vẽ vùng chọn (hotspot), hoặc nhấn nút thêm mới bên dưới.<br />
+                        3. Kéo toàn bộ vùng để di chuyển, hoặc kéo các <span className="text-indigo-600 font-bold">chấm điều khiển ở góc/cạnh</span> để thay đổi chiều rộng, chiều cao.<br />
+                        4. Có thể chọn từng vùng để chỉnh sửa độc lập, xóa hoặc tích chọn vùng làm Đáp Án Đúng.
                       </p>
                     </div>
 
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                       <span className="text-[10px] text-slate-400 font-bold">Danh sách các điểm vẽ trên ảnh</span>
                       <button
                         type="button"
                         onClick={() => {
                           const nid = `hotspot_${Date.now()}`;
-                          setHotspotsList([...hotspotsList, { id: nid, name: `Điểm ${hotspotsList.length + 1}`, x: 30, y: 30, w: 15, h: 15 }]);
+                          setHotspotsList([...hotspotsList, { id: nid, name: `Vùng ${hotspotsList.length + 1}`, x: 30, y: 30, w: 15, h: 15 }]);
+                          setSelectedSpotId(nid);
                         }}
-                        className="text-[10px] text-blue-500 hover:underline cursor-pointer font-bold"
+                        className="text-[10px] text-blue-500 hover:underline cursor-pointer font-extrabold"
                       >
                         + Thêm điểm nóng mới
                       </button>
                     </div>
 
-                    <div className="space-y-2.5">
+                    <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
                       {hotspotsList.map((h, idx) => {
                         const isCorrect = correctHotspotId === h.id;
+                        const isSelected = selectedSpotId === h.id;
                         return (
-                          <div key={h.id} className="flex gap-2 items-center bg-white p-3 border border-slate-200/60 rounded-xl shadow-sm">
+                          <div
+                            key={h.id}
+                            onClick={() => setSelectedSpotId(h.id)}
+                            className={`flex gap-2 items-center p-3 border rounded-xl shadow-sm transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-indigo-50/50 border-indigo-200 ring-2 ring-indigo-100/60'
+                                : 'bg-white border-slate-200/60 hover:border-slate-300'
+                            }`}
+                          >
                             <span className="text-[10px] text-slate-400 font-bold w-4">#{idx + 1}</span>
                             <input
                               type="text"
                               value={h.name}
+                              onClick={(e) => e.stopPropagation()}
                               onChange={(e) => {
                                 setHotspotsList(hotspotsList.map((spot) => (spot.id === h.id ? { ...spot, name: e.target.value } : spot)));
                               }}
                               placeholder="Tên vùng"
-                              className="w-32 px-2.5 py-1.5 border border-slate-200 rounded-lg text-slate-700 focus:outline-none font-bold"
+                              className="w-24 px-2 py-1.5 border border-slate-200 rounded-lg text-slate-700 focus:outline-none text-xs font-bold"
                             />
 
-                            <div className="flex gap-2 text-[10px] text-slate-400 font-bold items-center">
-                              <span>X: {h.x}%</span>
-                              <span>Y: {h.y}%</span>
-                              <span>Bán kính (Radius %):</span>
-                              <input
-                                type="number"
-                                value={h.radius ?? Math.max(1, Math.round(h.w / 2)) ?? 15}
-                                onChange={(e) => {
-                                  const newRad = Number(e.target.value);
-                                  setHotspotsList(hotspotsList.map((spot) => (spot.id === h.id ? { ...spot, radius: newRad, w: newRad * 2, h: newRad * 2 } : spot)));
-                                }}
-                                className="w-12 px-1 py-1 border border-slate-200 rounded font-bold"
-                              />
+                            <div className="flex gap-2.5 text-[10px] text-slate-400 font-bold items-center">
+                              <span>X: {Math.round(h.x)}%</span>
+                              <span>Y: {Math.round(h.y)}%</span>
+                              <div className="flex items-center gap-1">
+                                <span>Rộng:</span>
+                                <input
+                                  type="number"
+                                  value={Math.round(h.w ?? 15)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => {
+                                    const val = Math.max(2, Number(e.target.value));
+                                    setHotspotsList(hotspotsList.map((spot) => (spot.id === h.id ? { ...spot, w: val, radius: Math.max(val, spot.h ?? 15) / 2 } : spot)));
+                                  }}
+                                  className="w-10 px-1 py-0.5 border border-slate-200 rounded font-bold text-center"
+                                />
+                                <span>%</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span>Cao:</span>
+                                <input
+                                  type="number"
+                                  value={Math.round(h.h ?? 15)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => {
+                                    const val = Math.max(2, Number(e.target.value));
+                                    setHotspotsList(hotspotsList.map((spot) => (spot.id === h.id ? { ...spot, h: val, radius: Math.max(spot.w ?? 15, val) / 2 } : spot)));
+                                  }}
+                                  className="w-10 px-1 py-0.5 border border-slate-200 rounded font-bold text-center"
+                                />
+                                <span>%</span>
+                              </div>
                             </div>
 
                             <button
                               type="button"
-                              onClick={() => setCorrectHotspotId(h.id)}
-                              className={`ml-auto px-2.5 py-1.5 text-[10px] rounded-lg border font-black transition cursor-pointer ${
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCorrectHotspotId(h.id);
+                              }}
+                              className={`ml-auto px-2 py-1.5 text-[10px] rounded-lg border font-black transition cursor-pointer select-none ${
                                 isCorrect
-                                  ? 'bg-green-50 border-green-300 text-green-700'
-                                  : 'bg-white border-slate-200 text-slate-400'
+                                  ? 'bg-green-50 border-green-300 text-green-700 shadow-sm shadow-green-100/50'
+                                  : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
                               }`}
                             >
-                              {isCorrect ? '★ Đáp án đúng' : 'Đặt làm đáp án'}
+                              {isCorrect ? '★ Đáp án đúng' : 'Đặt đáp án'}
                             </button>
 
-                            {hotspotsList.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const filtered = hotspotsList.filter((spot) => spot.id !== h.id);
-                                  setHotspotsList(filtered);
-                                  if (correctHotspotId === h.id) {
-                                    setCorrectHotspotId(filtered[0]?.id || '');
-                                  }
-                                }}
-                                className="p-1.5 text-red-500 hover:bg-red-50 rounded"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const filtered = hotspotsList.filter((spot) => spot.id !== h.id);
+                                setHotspotsList(filtered);
+                                if (correctHotspotId === h.id) {
+                                  setCorrectHotspotId(filtered[0]?.id || '');
+                                }
+                                if (selectedSpotId === h.id) {
+                                  setSelectedSpotId(filtered[0]?.id || null);
+                                }
+                              }}
+                              className="p-1.5 text-red-500 hover:bg-red-50 rounded"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
                           </div>
                         );
                       })}
@@ -1595,20 +1868,21 @@ export default function QuestionsPage() {
                     {/* INTERACTIVE PREVIEW BUILDER STAGE */}
                     {qImageUrl ? (
                       <div className="space-y-1.5">
-                        <label className="text-[10px] text-slate-400 font-bold">BẢN ĐỒ XEM TRƯỚC VÀ KÉO THẢ ĐỊNH VỊ (HỌC SINH SẼ THẤY ĐÚNG NHƯ VẬY):</label>
+                        <label className="text-[10px] text-slate-400 font-bold">BẢN ĐỒ XEM TRƯỚC VÀ CHỈNH SỬA TRỰC QUAN (KÉO &amp; THẢ CHUỘT):</label>
                         <div
                           id="hotspot-editor-container"
+                          onMouseDown={handleContainerMouseDown}
                           onMouseMove={handleSpotMouseMove}
                           onMouseUp={handleSpotMouseUp}
                           onMouseLeave={handleSpotMouseUp}
-                          className="relative border-2 border-dashed border-slate-200 rounded-2xl bg-slate-900/5 overflow-hidden w-full h-80 flex items-center justify-center cursor-crosshair select-none"
+                          className="relative border-2 border-dashed border-slate-200 rounded-2xl bg-slate-950 overflow-hidden w-full h-80 flex items-center justify-center cursor-crosshair select-none shadow-inner"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             ref={adminImgRefCallback}
                             src={qImageUrl}
                             alt="Interactive hotspot builder"
-                            className="w-full h-full object-contain pointer-events-none"
+                            className="w-full h-full object-contain pointer-events-none opacity-90"
                             referrerPolicy="no-referrer"
                           />
 
@@ -1625,7 +1899,11 @@ export default function QuestionsPage() {
                             >
                               {hotspotsList.map((h, idx) => {
                                 const isCorrect = correctHotspotId === h.id;
-                                const radius = h.radius ?? Math.max(1, Math.round(h.w / 2)) ?? 15;
+                                const isSelected = selectedSpotId === h.id;
+                                
+                                const widthPct = h.w ?? 15;
+                                const heightPct = h.h ?? 15;
+
                                 return (
                                   <div
                                     key={h.id}
@@ -1633,19 +1911,76 @@ export default function QuestionsPage() {
                                     style={{
                                       left: `${h.x}%`,
                                       top: `${h.y}%`,
-                                      width: `${radius * 2}%`,
-                                      aspectRatio: '1 / 1',
-                                      transform: 'translate(-50%, -50%)',
+                                      width: `${widthPct}%`,
+                                      height: `${heightPct}%`,
                                     }}
-                                    className={`absolute border-2 rounded-full flex flex-col items-center justify-center transition-colors cursor-move shadow-md ${
+                                    className={`hotspot-rect absolute border-2 flex flex-col items-center justify-center transition-shadow shadow-md select-none rounded-lg cursor-move ${
                                       isCorrect
-                                        ? 'bg-green-500/20 border-green-500 text-green-700'
-                                        : 'bg-blue-500/20 border-blue-500 text-blue-700'
+                                        ? isSelected
+                                          ? 'bg-green-500/35 border-green-500 border-[3px] ring-2 ring-green-400/50 shadow-green-200/50'
+                                          : 'bg-green-500/20 border-green-500/90'
+                                        : isSelected
+                                          ? 'bg-blue-500/35 border-blue-500 border-[3px] ring-2 ring-blue-400/50 shadow-blue-200/50'
+                                          : 'bg-blue-500/20 border-blue-500/90'
                                     }`}
                                   >
-                                    <span className="bg-slate-900/80 text-white text-[8px] font-black px-1 py-0.5 rounded pointer-events-none">
-                                      #{idx + 1}
+                                    <span className="bg-slate-900/80 text-white text-[8px] font-black px-1 py-0.5 rounded pointer-events-none select-none">
+                                      #{idx + 1} {h.name}
                                     </span>
+
+                                    {/* 8 Resize Handles - only shown if selected */}
+                                    {isSelected && (
+                                      <>
+                                        {/* Corner: nw */}
+                                        <div
+                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'nw')}
+                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-nwse-resize shadow"
+                                          style={{ left: 0, top: 0, transform: 'translate(-50%, -50%)' }}
+                                        />
+                                        {/* Edge: n */}
+                                        <div
+                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'n')}
+                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-ns-resize shadow"
+                                          style={{ left: '50%', top: 0, transform: 'translate(-50%, -50%)' }}
+                                        />
+                                        {/* Corner: ne */}
+                                        <div
+                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'ne')}
+                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-nesw-resize shadow"
+                                          style={{ left: '100%', top: 0, transform: 'translate(-50%, -50%)' }}
+                                        />
+                                        {/* Edge: e */}
+                                        <div
+                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'e')}
+                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-ew-resize shadow"
+                                          style={{ left: '100%', top: '50%', transform: 'translate(-50%, -50%)' }}
+                                        />
+                                        {/* Corner: se */}
+                                        <div
+                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'se')}
+                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-nwse-resize shadow"
+                                          style={{ left: '100%', top: '100%', transform: 'translate(-50%, -50%)' }}
+                                        />
+                                        {/* Edge: s */}
+                                        <div
+                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 's')}
+                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-ns-resize shadow"
+                                          style={{ left: '50%', top: '100%', transform: 'translate(-50%, -50%)' }}
+                                        />
+                                        {/* Corner: sw */}
+                                        <div
+                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'sw')}
+                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-nesw-resize shadow"
+                                          style={{ left: 0, top: '100%', transform: 'translate(-50%, -50%)' }}
+                                        />
+                                        {/* Edge: w */}
+                                        <div
+                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'w')}
+                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-ew-resize shadow"
+                                          style={{ left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
+                                        />
+                                      </>
+                                    )}
                                   </div>
                                 );
                               })}

@@ -1757,7 +1757,28 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                           >
                             {/* Correct target hotspot zones (Only visible during feedback) */}
                             {isFeedbackActive && hotspotsList.map((target: any, tIdx: number) => {
+                              const w = target.width ?? target.w;
+                              const h = target.height ?? target.h;
+                              const hasDimensions = w !== undefined && h !== undefined;
                               const radius = target.radius || 15;
+
+                              if (hasDimensions) {
+                                return (
+                                  <div
+                                    key={`target-${tIdx}`}
+                                    className="absolute border-2 border-dashed border-green-500 bg-green-500/15 rounded-lg flex items-center justify-center text-[10px] font-black text-green-600 animate-pulse pointer-events-none shadow"
+                                    style={{
+                                      left: `${target.x}%`,
+                                      top: `${target.y}%`,
+                                      width: `${w}%`,
+                                      height: `${h}%`,
+                                    }}
+                                  >
+                                    Vùng {tIdx + 1}
+                                  </div>
+                                );
+                              }
+
                               return (
                                 <div
                                   key={`target-${tIdx}`}
@@ -1783,9 +1804,18 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                               let isDotCorrect = false;
                               if (isFeedbackActive) {
                                 isDotCorrect = hotspotsList.some((target: any) => {
-                                  const radius = target.radius || 15;
-                                  const dist = Math.sqrt(Math.pow(dot.x - target.x, 2) + Math.pow(dot.y - target.y, 2));
-                                  return dist <= radius;
+                                  const w = target.width ?? target.w;
+                                  const h = target.height ?? target.h;
+                                  if (w !== undefined && h !== undefined) {
+                                    // Rectangular bounding box check
+                                    return dot.x >= target.x && dot.x <= (target.x + w) &&
+                                           dot.y >= target.y && dot.y <= (target.y + h);
+                                  } else {
+                                    // Fallback circle distance check
+                                    const radius = target.radius || 15;
+                                    const dist = Math.sqrt(Math.pow(dot.x - target.x, 2) + Math.pow(dot.y - target.y, 2));
+                                    return dist <= radius;
+                                  }
                                 });
                               }
 
