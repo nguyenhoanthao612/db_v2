@@ -534,33 +534,63 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
         try {
           const parsed: QuestionAnswers = JSON.parse(q.Answers);
           const rawHotspots = parsed.hotspots || [];
-          const hotspots = rawHotspots.map((h: any) => {
+          const hasAnyIsCorrectDefined = rawHotspots.some((h: any) => h.isCorrect === true || h.isCorrect === false);
+          const hotspotsList = rawHotspots.map((h: any) => {
+            let isCorrect = h.isCorrect;
+            if (!hasAnyIsCorrectDefined) {
+              if (correctAnsStr && correctAnsStr.startsWith('[')) {
+                try {
+                  const arr = JSON.parse(correctAnsStr);
+                  isCorrect = arr.includes(h.id);
+                } catch (e) {
+                  isCorrect = (h.id === correctAnsStr);
+                }
+              } else {
+                isCorrect = (h.id === correctAnsStr);
+              }
+            }
             const hasRadius = h.radius !== undefined;
             const w = h.width ?? h.w ?? 15;
             const h_val = h.height ?? h.h ?? 15;
             const radius = h.radius ?? Math.max(1, Math.round(w / 2));
             return {
               ...h,
-              x: hasRadius ? h.x : h.x + w / 2,
-              y: hasRadius ? h.y : h.y + h_val / 2,
+              isCorrect: !!isCorrect,
+              x: h.x,
+              y: h.y,
+              w: w,
+              h: h_val,
+              centerX: hasRadius ? h.x : h.x + w / 2,
+              centerY: hasRadius ? h.y : h.y + h_val / 2,
               radius: radius,
             };
           });
+
           if (!Array.isArray(studentAnswer)) {
             return String(studentAnswer) === String(correctAnsStr);
           }
           const dots = studentAnswer as { x: number; y: number }[];
-          if (hotspots.length !== dots.length) return false;
+          const correctHotspots = hotspotsList.filter((h: any) => h.isCorrect);
+
+          if (correctHotspots.length !== dots.length) return false;
 
           const match = (hotspotIdx: number, usedDots: Set<number>): boolean => {
-            if (hotspotIdx === hotspots.length) return true;
-            const spot = hotspots[hotspotIdx] as any;
+            if (hotspotIdx === correctHotspots.length) return true;
+            const spot = correctHotspots[hotspotIdx] as any;
             for (let i = 0; i < dots.length; i++) {
               if (!usedDots.has(i)) {
                 const dot = dots[i];
-                const radius = spot.radius || 15;
-                const dist = Math.sqrt(Math.pow(dot.x - spot.x, 2) + Math.pow(dot.y - spot.y, 2));
-                const inside = dist <= radius;
+                const w = spot.width ?? spot.w;
+                const h = spot.height ?? spot.h;
+                let inside = false;
+                if (w !== undefined && h !== undefined) {
+                  inside = dot.x >= spot.x && dot.x <= (spot.x + w) &&
+                           dot.y >= spot.y && dot.y <= (spot.y + h);
+                } else {
+                  const radius = spot.radius || 15;
+                  const dist = Math.sqrt(Math.pow(dot.x - spot.centerX, 2) + Math.pow(dot.y - spot.centerY, 2));
+                  inside = dist <= radius;
+                }
                 if (inside) {
                   usedDots.add(i);
                   if (match(hotspotIdx + 1, usedDots)) {
@@ -1643,13 +1673,28 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                 {/* 9. HOTSPOT (Click Image Target Coordinate) */}
                 {currentQ.QuestionType === 'Hotspot' && parsedAnswers.hotspots && currentQ.Image && (() => {
                                   const rawHotspots = parsedAnswers.hotspots || [];
+                  const hasAnyIsCorrectDefined = rawHotspots.some((h: any) => h.isCorrect === true || h.isCorrect === false);
                   const hotspotsList = rawHotspots.map((h: any) => {
+                    let isCorrect = h.isCorrect;
+                    if (!hasAnyIsCorrectDefined) {
+                      if (currentQ.CorrectAnswer && currentQ.CorrectAnswer.startsWith('[')) {
+                        try {
+                          const arr = JSON.parse(currentQ.CorrectAnswer);
+                          isCorrect = arr.includes(h.id);
+                        } catch (e) {
+                          isCorrect = (h.id === currentQ.CorrectAnswer);
+                        }
+                      } else {
+                        isCorrect = (h.id === currentQ.CorrectAnswer);
+                      }
+                    }
                     const hasRadius = h.radius !== undefined;
                     const w = h.width ?? h.w ?? 15;
                     const h_val = h.height ?? h.h ?? 15;
                     const radius = h.radius ?? Math.max(1, Math.round(w / 2));
                     return {
                       ...h,
+                      isCorrect: !!isCorrect,
                       x: h.x,
                       y: h.y,
                       centerX: hasRadius ? h.x : h.x + w / 2,
@@ -1657,7 +1702,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                       radius: radius,
                     };
                   });
-                  const targetCount = hotspotsList.length;
+                  const targetCount = hotspotsList.filter((h: any) => h.isCorrect).length || 1;
                   const dots = Array.isArray(currentAnswer) ? currentAnswer : [];
 
                   return (
@@ -1721,12 +1766,17 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                 const w = target.width ?? target.w;
                                 const h = target.height ?? target.h;
                                 const hasDimensions = w !== undefined && h !== undefined;
+                                const isCorrect = target.isCorrect;
 
                                 if (hasDimensions) {
                                   return (
                                     <div
                                       key={`target-${tIdx}`}
-                                      className="absolute border-2 border-dashed border-green-500 bg-green-500/15 rounded-lg flex items-center justify-center text-[10px] font-black text-green-600 animate-pulse pointer-events-none shadow"
+                                      className={`absolute border-2 border-dashed rounded-lg flex items-center justify-center text-[10px] font-black animate-pulse pointer-events-none shadow px-1 ${
+                                        isCorrect
+                                          ? 'border-green-500 bg-green-500/15 text-green-600'
+                                          : 'border-red-500 bg-red-500/15 text-red-600'
+                                      }`}
                                       style={{
                                         left: `${target.x}%`,
                                         top: `${target.y}%`,
@@ -1734,7 +1784,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                         height: `${h}%`,
                                       }}
                                     >
-                                      Vùng {tIdx + 1}
+                                      {isCorrect ? '✓' : '✕'} {target.name}
                                     </div>
                                   );
                                 }
@@ -1742,7 +1792,11 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                 return (
                                   <div
                                     key={`target-${tIdx}`}
-                                    className="absolute border-2 border-dashed border-green-500 bg-green-500/10 rounded-full flex items-center justify-center text-[10px] font-black text-green-600 animate-pulse pointer-events-none"
+                                    className={`absolute border-2 border-dashed rounded-full flex items-center justify-center text-[10px] font-black animate-pulse pointer-events-none px-1 ${
+                                      isCorrect
+                                        ? 'border-green-500 bg-green-500/10 text-green-600'
+                                        : 'border-red-500 bg-red-500/10 text-red-600'
+                                    }`}
                                     style={{
                                       left: `${target.centerX}%`,
                                       top: `${target.centerY}%`,
@@ -1751,7 +1805,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                       transform: 'translate(-50%, -50%)',
                                     }}
                                   >
-                                    Vùng {tIdx + 1}
+                                    {isCorrect ? '✓' : '✕'} {target.name}
                                   </div>
                                 );
                               })}
@@ -1760,10 +1814,11 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                               {dots.map((dot: any, dIdx: number) => {
                                 const isDragging = draggingDot && draggingDot.qId === currentQ.QuestionID && draggingDot.index === dIdx;
                                 
-                                // Check if this dot is close enough to ANY target hotspot
+                                // Check if this dot is close enough to ANY CORRECT target hotspot
                                 let isDotCorrect = false;
                                 if (isFeedbackActive) {
                                   isDotCorrect = hotspotsList.some((target: any) => {
+                                    if (!target.isCorrect) return false;
                                     const w = target.width ?? target.w;
                                     const h = target.height ?? target.h;
                                     if (w !== undefined && h !== undefined) {
