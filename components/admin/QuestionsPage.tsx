@@ -96,81 +96,33 @@ export default function QuestionsPage() {
     containerHeight: number;
   } | null>(null);
 
-  const [imageRect, setImageRect] = useState<{
-    width: number;
-    height: number;
-    left: number;
-    top: number;
-  } | null>(null);
+  const [imageBounds, setImageBounds] = useState<{ width: number; height: number } | null>(null);
+  const [showDebug, setShowDebug] = useState<boolean>(false);
   const [adminImgElement, setAdminImgElement] = useState<HTMLImageElement | null>(null);
+
+  const imageRect = imageBounds ? {
+    width: imageBounds.width,
+    height: imageBounds.height,
+    left: 0,
+    top: 0
+  } : null;
 
   const adminImgRefCallback = useCallback((node: HTMLImageElement | null) => {
     if (node !== null) {
       setAdminImgElement(node);
+      const updateBounds = () => {
+        const rect = node.getBoundingClientRect();
+        setImageBounds({
+          width: rect.width,
+          height: rect.height,
+        });
+      };
+      node.addEventListener('load', updateBounds);
+      const observer = new ResizeObserver(updateBounds);
+      observer.observe(node);
+      setTimeout(updateBounds, 100);
     }
   }, []);
-
-  const updateAdminImageRect = useCallback((img: HTMLImageElement | null) => {
-    if (!img) return;
-
-    const rect = img.getBoundingClientRect();
-    const naturalWidth = img.naturalWidth;
-    const naturalHeight = img.naturalHeight;
-
-    if (!naturalWidth || !naturalHeight || !rect.width || !rect.height) return;
-
-    const containerWidth = rect.width;
-    const containerHeight = rect.height;
-
-    const imageRatio = naturalWidth / naturalHeight;
-    const containerRatio = containerWidth / containerHeight;
-
-    let displayedWidth = containerWidth;
-    let displayedHeight = containerHeight;
-    let offsetX = 0;
-    let offsetY = 0;
-
-    if (containerRatio > imageRatio) {
-      displayedHeight = containerHeight;
-      displayedWidth = containerHeight * imageRatio;
-      offsetX = (containerWidth - displayedWidth) / 2;
-    } else {
-      displayedWidth = containerWidth;
-      displayedHeight = containerWidth / imageRatio;
-      offsetY = (containerHeight - displayedHeight) / 2;
-    }
-
-    setImageRect({
-      width: displayedWidth,
-      height: displayedHeight,
-      left: offsetX,
-      top: offsetY,
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!adminImgElement) return;
-
-    const observer = new ResizeObserver(() => {
-      updateAdminImageRect(adminImgElement);
-    });
-    observer.observe(adminImgElement);
-
-    const handleLoad = () => {
-      updateAdminImageRect(adminImgElement);
-    };
-
-    adminImgElement.addEventListener('load', handleLoad);
-    const timerId = setTimeout(() => {
-      updateAdminImageRect(adminImgElement);
-    }, 0);
-
-    return () => {
-      observer.disconnect();
-      adminImgElement.removeEventListener('load', handleLoad);
-      clearTimeout(timerId);
-    };
-  }, [adminImgElement, qImageUrl, showQModal, updateAdminImageRect]);
 
   // For Match Image to Text
   const [imgTextPairs, setImgTextPairs] = useState<{ img: string; text: string }[]>([{ img: '', text: '' }]);
@@ -341,8 +293,8 @@ export default function QuestionsPage() {
     } else {
       setEditingQ(null);
       
-      const defaultLevel = (qLevelFilter as 'LV1' | 'LV2' | 'LV3') || 'LV1';
-      const defaultExamID = qExamFilter || 'OT1';
+      const defaultLevel = (qLevelFilter && qLevelFilter !== 'all') ? (qLevelFilter as 'LV1' | 'LV2' | 'LV3') : 'LV1';
+      const defaultExamID = (qExamFilter && qExamFilter !== 'all') ? qExamFilter : 'OT1';
       
       setQExamID(defaultExamID);
       setQLevel(defaultLevel);
@@ -560,21 +512,16 @@ export default function QuestionsPage() {
 
   // Drag handles and drawing for Hotspot Editor
   const getRelativeCoords = (e: React.MouseEvent) => {
-    if (!imageRect) return null;
-    const container = document.getElementById('hotspot-editor-container');
-    if (!container) return null;
-    const rect = container.getBoundingClientRect();
+    const wrapper = document.getElementById('hotspot-image-wrapper');
+    if (!wrapper) return null;
+    const rect = wrapper.getBoundingClientRect();
     
-    // Position relative to the image rect itself inside the container
-    const imgLeft = rect.left + imageRect.left;
-    const imgTop = rect.top + imageRect.top;
-    
-    const xPx = e.clientX - imgLeft;
-    const yPx = e.clientY - imgTop;
+    const xPx = e.clientX - rect.left;
+    const yPx = e.clientY - rect.top;
     
     // Percentage relative to displayed image dimensions
-    const xPct = (xPx / imageRect.width) * 100;
-    const yPct = (yPx / imageRect.height) * 100;
+    const xPct = (xPx / rect.width) * 100;
+    const yPct = (yPx / rect.height) * 100;
     
     return {
       x: Math.max(0, Math.min(100, xPct)),
@@ -583,10 +530,12 @@ export default function QuestionsPage() {
   };
 
   const getMinPct = () => {
-    if (!imageRect) return { w: 2, h: 2 };
+    const wrapper = document.getElementById('hotspot-image-wrapper');
+    if (!wrapper) return { w: 2, h: 2 };
+    const rect = wrapper.getBoundingClientRect();
     return {
-      w: (20 / imageRect.width) * 100,
-      h: (20 / imageRect.height) * 100,
+      w: (20 / rect.width) * 100,
+      h: (20 / rect.height) * 100,
     };
   };
 
@@ -832,7 +781,7 @@ export default function QuestionsPage() {
 
     try {
       const optionRegex = /^\s*(?:([a-zA-Z0-9]{1,2})\s*[.)\-:]|([①②③④⑤⑥⑦⑧⑨⑩]))\s*(.*)/i;
-      const answerLineRegex = /^\s*(?:Đáp án đúng|Correct|Đáp án|Answer)\s*:\s*(.*)/i;
+      const answerLineRegex = /^\s*(?:Đáp án đúng|Correct|Đáp án|Answer|Key)\s*(?:là|:|\s)\s*(.*)/i;
       const circledMap: Record<string, string> = {
         '①': '1', '②': '2', '③': '3', '④': '4', '⑤': '5',
         '⑥': '6', '⑦': '7', '⑧': '8', '⑨': '9', '⑩': '10'
@@ -890,7 +839,8 @@ export default function QuestionsPage() {
         return;
       }
 
-      const questionContent = lines.slice(0, firstOptionIdx).join('\n').trim();
+      const questionLines = lines.slice(0, firstOptionIdx).filter((line) => !answerLineRegex.test(line));
+      const questionContent = questionLines.join('\n').trim();
       
       const parsedOptions: { prefix: string; text: string; isCorrect: boolean }[] = [];
       const externalCorrectKeys: string[] = [];
@@ -1868,125 +1818,167 @@ export default function QuestionsPage() {
                     {/* INTERACTIVE PREVIEW BUILDER STAGE */}
                     {qImageUrl ? (
                       <div className="space-y-1.5">
-                        <label className="text-[10px] text-slate-400 font-bold">BẢN ĐỒ XEM TRƯỚC VÀ CHỈNH SỬA TRỰC QUAN (KÉO &amp; THẢ CHUỘT):</label>
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] text-slate-400 font-bold">BẢN ĐỒ XEM TRƯỚC VÀ CHỈNH SỬA TRỰC QUAN (KÉO &amp; THẢ CHUỘT):</label>
+                          <button
+                            type="button"
+                            onClick={() => setShowDebug(!showDebug)}
+                            className="text-[10px] text-indigo-500 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>{showDebug ? 'Ẩn Debug 🛠️' : 'Hiện Debug 🛠️'}</span>
+                          </button>
+                        </div>
                         <div
                           id="hotspot-editor-container"
-                          onMouseDown={handleContainerMouseDown}
-                          onMouseMove={handleSpotMouseMove}
-                          onMouseUp={handleSpotMouseUp}
-                          onMouseLeave={handleSpotMouseUp}
-                          className="relative border-2 border-dashed border-slate-200 rounded-2xl bg-slate-950 overflow-hidden w-full h-80 flex items-center justify-center cursor-crosshair select-none shadow-inner"
+                          className="relative border-2 border-dashed border-slate-200 rounded-2xl bg-slate-950 overflow-hidden w-full h-80 flex items-center justify-center select-none shadow-inner animate-fade-in"
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            ref={adminImgRefCallback}
-                            src={qImageUrl}
-                            alt="Interactive hotspot builder"
-                            className="w-full h-full object-contain pointer-events-none opacity-90"
-                            referrerPolicy="no-referrer"
-                          />
+                          {/* Inner wrap that shrink-wraps around the img tag perfectly */}
+                          <div
+                            id="hotspot-image-wrapper"
+                            onMouseDown={handleContainerMouseDown}
+                            onMouseMove={handleSpotMouseMove}
+                            onMouseUp={handleSpotMouseUp}
+                            onMouseLeave={handleSpotMouseUp}
+                            className="relative inline-block cursor-crosshair"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              ref={adminImgRefCallback}
+                              src={qImageUrl}
+                              alt="Interactive hotspot builder"
+                              className="max-w-full max-h-[312px] w-auto h-auto block pointer-events-none opacity-90"
+                              referrerPolicy="no-referrer"
+                            />
 
-                          {imageRect && (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                left: `${imageRect.left}px`,
-                                top: `${imageRect.top}px`,
-                                width: `${imageRect.width}px`,
-                                height: `${imageRect.height}px`,
-                              }}
-                              className="pointer-events-auto"
-                            >
-                              {hotspotsList.map((h, idx) => {
-                                const isCorrect = correctHotspotId === h.id;
-                                const isSelected = selectedSpotId === h.id;
-                                
-                                const widthPct = h.w ?? 15;
-                                const heightPct = h.h ?? 15;
+                            {imageBounds && (
+                              <div className="absolute inset-0 pointer-events-none">
+                                {hotspotsList.map((h, idx) => {
+                                  const isCorrect = correctHotspotId === h.id;
+                                  const isSelected = selectedSpotId === h.id;
+                                  
+                                  const widthPct = h.w ?? 15;
+                                  const heightPct = h.h ?? 15;
 
+                                  return (
+                                    <div
+                                      key={h.id}
+                                      onMouseDown={(e) => handleSpotMouseDown(e, h.id)}
+                                      style={{
+                                        left: `${h.x}%`,
+                                        top: `${h.y}%`,
+                                        width: `${widthPct}%`,
+                                        height: `${heightPct}%`,
+                                      }}
+                                      className={`hotspot-rect absolute border-2 flex flex-col items-center justify-center transition-shadow shadow-md select-none rounded-lg cursor-move pointer-events-auto ${
+                                        isCorrect
+                                          ? isSelected
+                                            ? 'bg-green-500/35 border-green-500 border-[3px] ring-2 ring-green-400/50 shadow-green-200/50'
+                                            : 'bg-green-500/20 border-green-500/90'
+                                          : isSelected
+                                            ? 'bg-blue-500/35 border-blue-500 border-[3px] ring-2 ring-blue-400/50 shadow-blue-200/50'
+                                            : 'bg-blue-500/20 border-blue-500/90'
+                                      }`}
+                                    >
+                                      <span className="bg-slate-900/80 text-white text-[8px] font-black px-1 py-0.5 rounded pointer-events-none select-none">
+                                        #{idx + 1} {h.name}
+                                      </span>
+
+                                      {/* 8 Resize Handles - only shown if selected */}
+                                      {isSelected && (
+                                        <>
+                                          {/* Corner: nw */}
+                                          <div
+                                            onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'nw')}
+                                            className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-nwse-resize shadow"
+                                            style={{ left: 0, top: 0, transform: 'translate(-50%, -50%)' }}
+                                          />
+                                          {/* Edge: n */}
+                                          <div
+                                            onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'n')}
+                                            className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-ns-resize shadow"
+                                            style={{ left: '50%', top: 0, transform: 'translate(-50%, -50%)' }}
+                                          />
+                                          {/* Corner: ne */}
+                                          <div
+                                            onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'ne')}
+                                            className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-nesw-resize shadow"
+                                            style={{ left: '100%', top: 0, transform: 'translate(-50%, -50%)' }}
+                                          />
+                                          {/* Edge: e */}
+                                          <div
+                                            onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'e')}
+                                            className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-ew-resize shadow"
+                                            style={{ left: '100%', top: '50%', transform: 'translate(-50%, -50%)' }}
+                                          />
+                                          {/* Corner: se */}
+                                          <div
+                                            onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'se')}
+                                            className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-nwse-resize shadow"
+                                            style={{ left: '100%', top: '100%', transform: 'translate(-50%, -50%)' }}
+                                          />
+                                          {/* Edge: s */}
+                                          <div
+                                            onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 's')}
+                                            className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-ns-resize shadow"
+                                            style={{ left: '50%', top: '100%', transform: 'translate(-50%, -50%)' }}
+                                          />
+                                          {/* Corner: sw */}
+                                          <div
+                                            onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'sw')}
+                                            className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-nesw-resize shadow"
+                                            style={{ left: 0, top: '100%', transform: 'translate(-50%, -50%)' }}
+                                          />
+                                          {/* Edge: w */}
+                                          <div
+                                            onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'w')}
+                                            className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-ew-resize shadow"
+                                            style={{ left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
+                                          />
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {showDebug && imageBounds && (
+                          <div className="p-4 bg-slate-900 text-slate-200 rounded-xl font-mono text-[10px] space-y-2 border border-slate-700 shadow-inner">
+                            <div className="font-bold text-indigo-400 border-b border-slate-700 pb-1 flex justify-between items-center">
+                              <span>THÔNG TIN DEBUG COORDINATES (REAL-TIME % VS PX)</span>
+                              <span className="text-[9px] px-1.5 py-0.5 bg-slate-800 text-slate-400 rounded">EDITOR</span>
+                            </div>
+                            <div>
+                              <strong>Kích thước ảnh hiển thị (Rendered img size):</strong> {Math.round(imageBounds.width)}px × {Math.round(imageBounds.height)}px
+                            </div>
+                            <div className="space-y-1">
+                              <strong>Tọa độ Hotspots (% vs px):</strong>
+                              {hotspotsList.map((h, i) => {
+                                const wPct = h.w ?? 15;
+                                const hPct = h.h ?? 15;
+                                const leftPx = Math.round((h.x / 100) * imageBounds.width);
+                                const topPx = Math.round((h.y / 100) * imageBounds.height);
+                                const wPx = Math.round((wPct / 100) * imageBounds.width);
+                                const hPx = Math.round((hPct / 100) * imageBounds.height);
                                 return (
-                                  <div
-                                    key={h.id}
-                                    onMouseDown={(e) => handleSpotMouseDown(e, h.id)}
-                                    style={{
-                                      left: `${h.x}%`,
-                                      top: `${h.y}%`,
-                                      width: `${widthPct}%`,
-                                      height: `${heightPct}%`,
-                                    }}
-                                    className={`hotspot-rect absolute border-2 flex flex-col items-center justify-center transition-shadow shadow-md select-none rounded-lg cursor-move ${
-                                      isCorrect
-                                        ? isSelected
-                                          ? 'bg-green-500/35 border-green-500 border-[3px] ring-2 ring-green-400/50 shadow-green-200/50'
-                                          : 'bg-green-500/20 border-green-500/90'
-                                        : isSelected
-                                          ? 'bg-blue-500/35 border-blue-500 border-[3px] ring-2 ring-blue-400/50 shadow-blue-200/50'
-                                          : 'bg-blue-500/20 border-blue-500/90'
-                                    }`}
-                                  >
-                                    <span className="bg-slate-900/80 text-white text-[8px] font-black px-1 py-0.5 rounded pointer-events-none select-none">
-                                      #{idx + 1} {h.name}
-                                    </span>
-
-                                    {/* 8 Resize Handles - only shown if selected */}
-                                    {isSelected && (
-                                      <>
-                                        {/* Corner: nw */}
-                                        <div
-                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'nw')}
-                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-nwse-resize shadow"
-                                          style={{ left: 0, top: 0, transform: 'translate(-50%, -50%)' }}
-                                        />
-                                        {/* Edge: n */}
-                                        <div
-                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'n')}
-                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-ns-resize shadow"
-                                          style={{ left: '50%', top: 0, transform: 'translate(-50%, -50%)' }}
-                                        />
-                                        {/* Corner: ne */}
-                                        <div
-                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'ne')}
-                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-nesw-resize shadow"
-                                          style={{ left: '100%', top: 0, transform: 'translate(-50%, -50%)' }}
-                                        />
-                                        {/* Edge: e */}
-                                        <div
-                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'e')}
-                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-ew-resize shadow"
-                                          style={{ left: '100%', top: '50%', transform: 'translate(-50%, -50%)' }}
-                                        />
-                                        {/* Corner: se */}
-                                        <div
-                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'se')}
-                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-nwse-resize shadow"
-                                          style={{ left: '100%', top: '100%', transform: 'translate(-50%, -50%)' }}
-                                        />
-                                        {/* Edge: s */}
-                                        <div
-                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 's')}
-                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-ns-resize shadow"
-                                          style={{ left: '50%', top: '100%', transform: 'translate(-50%, -50%)' }}
-                                        />
-                                        {/* Corner: sw */}
-                                        <div
-                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'sw')}
-                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-nesw-resize shadow"
-                                          style={{ left: 0, top: '100%', transform: 'translate(-50%, -50%)' }}
-                                        />
-                                        {/* Edge: w */}
-                                        <div
-                                          onMouseDown={(e) => handleResizeHandleMouseDown(e, h.id, 'w')}
-                                          className="resize-handle absolute w-3 h-3 bg-white border-2 border-indigo-500 rounded-full hover:bg-slate-100 z-20 cursor-ew-resize shadow"
-                                          style={{ left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
-                                        />
-                                      </>
-                                    )}
+                                  <div key={h.id} className="pl-3 border-l-2 border-indigo-500/40">
+                                    <span className="text-indigo-300 font-bold">Vùng #{i + 1} ({h.name}):</span>
+                                    <div className="pl-2 text-slate-300">
+                                      • Saved (%): <code className="text-amber-300">x={h.x}%, y={h.y}%, w={wPct}%, h={hPct}%</code>
+                                      <br />
+                                      • Rendered (px): <code className="text-emerald-300">Left={leftPx}px, Top={topPx}px, Width={wPx}px, Height={hPx}px</code>
+                                    </div>
                                   </div>
                                 );
                               })}
+                              {hotspotsList.length === 0 && (
+                                <div className="text-slate-400 italic pl-3">Chưa có hotspot nào được tạo.</div>
+                              )}
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="p-8 text-center text-slate-400 border border-dashed border-slate-200 rounded-2xl bg-slate-50 text-xs">
