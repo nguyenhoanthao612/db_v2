@@ -40,6 +40,17 @@ const parseVideoUrl = (urlStr: string) => {
       }
     }
     
+    if (hostname.includes('vimeo.com')) {
+      const parts = url.pathname.split('/');
+      const videoId = parts[parts.length - 1] || parts[parts.length - 2];
+      if (videoId && /^\d+$/.test(videoId)) {
+        return {
+          type: 'vimeo',
+          url: `https://player.vimeo.com/video/${videoId}`
+        };
+      }
+    }
+    
     if (url.protocol === 'http:' || url.protocol === 'https:') {
       return {
         type: 'direct',
@@ -81,6 +92,8 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
   // Drag and drop state for sequence ordering
   const [seqDragIndex, setSeqDragIndex] = useState<number | null>(null);
+  const [seqHoverIndex, setSeqHoverIndex] = useState<number | null>(null);
+  const [seqDragHeight, setSeqDragHeight] = useState<number>(54);
   const [seqDragY, setSeqDragY] = useState<number>(0);
   const seqDragStartRef = useRef<{ y: number; index: number } | null>(null);
   const seqRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -951,6 +964,39 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                 </div>
               )}
 
+              {currentQ.Video && (
+                <div className="relative border border-slate-100 rounded-2xl overflow-hidden max-w-lg mx-auto bg-slate-900 aspect-video flex items-center justify-center shadow-md">
+                  {(() => {
+                    const parsed = parseVideoUrl(currentQ.Video);
+                    if (!parsed) {
+                      return (
+                        <p className="text-xs text-slate-400 p-4">
+                          Video URL không hợp lệ hoặc không được hỗ trợ.
+                        </p>
+                      );
+                    }
+                    if (parsed.type === 'youtube' || parsed.type === 'vimeo') {
+                      return (
+                        <iframe
+                          src={parsed.url}
+                          className="w-full h-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                          title="Video Player"
+                        />
+                      );
+                    }
+                    return (
+                      <video
+                        src={parsed.url}
+                        controls
+                        className="w-full h-full object-contain"
+                      />
+                    );
+                  })()}
+                </div>
+              )}
+
               {currentQ.Audio && (
                 <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex items-center gap-3">
                   <Volume2 className="w-5 h-5 text-blue-500" />
@@ -961,7 +1007,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
               {/* RENDER INTERACTIVE WIDGET BASED ON 11 IC3 QUESTION TYPES */}
               <div className="pt-4 border-t border-slate-100">
                 {/* 1. MULTIPLE CHOICE */}
-                {currentQ.QuestionType === 'Multiple Choice' && parsedAnswers.options && (() => {
+                {(currentQ.QuestionType === 'Multiple Choice' || currentQ.QuestionType === 'Video Based') && parsedAnswers.options && (() => {
                   const options = parsedAnswers.options!;
                   const shuffledIndices = questionsShuffledOptions[currentQ.QuestionID] || options.map((_, i) => i);
                   return (
@@ -1390,7 +1436,11 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                     e.currentTarget.setPointerCapture(e.pointerId);
                     seqDragStartRef.current = { y: e.clientY, index: idx };
                     setSeqDragIndex(idx);
+                    setSeqHoverIndex(idx);
                     setSeqDragY(0);
+                    // Safely measure height in event handler
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setSeqDragHeight(rect.height || 54);
                   };
 
                   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>, idx: number) => {
@@ -1398,44 +1448,27 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                     const dy = e.clientY - seqDragStartRef.current.y;
                     setSeqDragY(dy);
 
-                    const currentIdx = seqDragStartRef.current.index;
-                    const currentEl = seqRefs.current[currentIdx];
-                    if (currentEl) {
-                      const rect = currentEl.getBoundingClientRect();
-                      const itemHeight = rect.height;
-
-                      // Dragging down
-                      if (dy > itemHeight * 0.6 && currentIdx < list.length - 1) {
-                        const newList = [...list];
-                        const temp = newList[currentIdx];
-                        newList[currentIdx] = newList[currentIdx + 1];
-                        newList[currentIdx + 1] = temp;
-
-                        handleSelectAnswer(currentQ.QuestionID, newList);
-
-                        seqDragStartRef.current = {
-                          y: seqDragStartRef.current.y + itemHeight,
-                          index: currentIdx + 1
-                        };
-                        setSeqDragIndex(currentIdx + 1);
-                        setSeqDragY(e.clientY - seqDragStartRef.current.y);
+                    // Calculate hover index based on pointer's clientY
+                    const clientY = e.clientY;
+                    const els = seqRefs.current;
+                    let targetIdx = idx;
+                    
+                    for (let i = 0; i < list.length; i++) {
+                      const el = els[i];
+                      if (!el || i === idx) continue;
+                      const rect = el.getBoundingClientRect();
+                      const middleY = rect.top + rect.height / 2;
+                      
+                      if (clientY < middleY && i < targetIdx) {
+                        targetIdx = i;
+                        break;
                       }
-                      // Dragging up
-                      else if (dy < -itemHeight * 0.6 && currentIdx > 0) {
-                        const newList = [...list];
-                        const temp = newList[currentIdx];
-                        newList[currentIdx] = newList[currentIdx - 1];
-                        newList[currentIdx - 1] = temp;
-
-                        handleSelectAnswer(currentQ.QuestionID, newList);
-
-                        seqDragStartRef.current = {
-                          y: seqDragStartRef.current.y - itemHeight,
-                          index: currentIdx - 1
-                        };
-                        setSeqDragIndex(currentIdx - 1);
-                        setSeqDragY(e.clientY - seqDragStartRef.current.y);
+                      if (clientY > middleY && i > targetIdx) {
+                        targetIdx = i;
                       }
+                    }
+                    if (targetIdx !== seqHoverIndex) {
+                      setSeqHoverIndex(targetIdx);
                     }
                   };
 
@@ -1444,7 +1477,17 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                     try {
                       e.currentTarget.releasePointerCapture(e.pointerId);
                     } catch (err) {}
+
+                    // Apply the final reordered list state on drop
+                    if (seqHoverIndex !== null && seqHoverIndex !== seqDragIndex) {
+                      const newList = [...list];
+                      const [draggedItem] = newList.splice(seqDragIndex, 1);
+                      newList.splice(seqHoverIndex, 0, draggedItem);
+                      handleSelectAnswer(currentQ.QuestionID, newList);
+                    }
+
                     setSeqDragIndex(null);
+                    setSeqHoverIndex(null);
                     seqDragStartRef.current = null;
                   };
 
@@ -1468,7 +1511,30 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                               styleClass = 'bg-red-50 border-red-300 text-red-800';
                             }
                           } else if (isDragging) {
-                            styleClass = 'bg-blue-50/90 border-blue-400 text-blue-800 scale-[1.02] shadow-lg';
+                            styleClass = 'bg-blue-50/95 border-blue-400 text-blue-800 scale-[1.02] shadow-xl ring-2 ring-blue-100';
+                          }
+
+                          let transformStyle = 'none';
+                          let transitionStyle = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
+                          
+                          if (seqDragIndex !== null && seqHoverIndex !== null) {
+                            if (isDragging) {
+                              transformStyle = `translateY(${seqDragY}px)`;
+                              transitionStyle = 'none';
+                            } else {
+                              const gap = 8;
+                              const totalShift = seqDragHeight + gap;
+                              
+                              if (seqDragIndex < seqHoverIndex) {
+                                if (idx > seqDragIndex && idx <= seqHoverIndex) {
+                                  transformStyle = `translateY(${-totalShift}px)`;
+                                }
+                              } else if (seqDragIndex > seqHoverIndex) {
+                                if (idx < seqDragIndex && idx >= seqHoverIndex) {
+                                  transformStyle = `translateY(${totalShift}px)`;
+                                }
+                              }
+                            }
                           }
 
                           return (
@@ -1482,7 +1548,8 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                               onPointerUp={handlePointerUp}
                               onPointerCancel={handlePointerUp}
                               style={{
-                                transform: isDragging ? `translateY(${seqDragY}px)` : 'none',
+                                transform: transformStyle,
+                                transition: transitionStyle,
                                 zIndex: isDragging ? 50 : 'auto',
                                 touchAction: 'none',
                               }}
@@ -1627,101 +1694,6 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                   </div>
                 )}
 
-                 {/* 7. VIDEO BASED */}
-                {currentQ.QuestionType === 'Video Based' && currentQ.Video && parsedAnswers.options && (() => {
-                  const options = parsedAnswers.options!;
-                  const shuffledIndices = questionsShuffledOptions[currentQ.QuestionID] || options.map((_, i) => i);
-                  return (
-                    <div className="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                      <div className="bg-slate-900 rounded-2xl overflow-hidden aspect-video relative shadow-inner border border-slate-800 flex items-center justify-center">
-                        {(() => {
-                          const parsed = parseVideoUrl(currentQ.Video);
-                          if (!parsed) {
-                            return (
-                              <p className="text-xs text-slate-400 p-4">
-                                Video URL không hợp lệ hoặc không được hỗ trợ.
-                              </p>
-                            );
-                          }
-                          if (parsed.type === 'youtube') {
-                            return (
-                              <iframe
-                                src={parsed.url}
-                                className="w-full h-full"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                allowFullScreen
-                                title="Video Player"
-                              />
-                            );
-                          }
-                          return (
-                            <video
-                              src={parsed.url}
-                              controls
-                              className="w-full h-full object-contain"
-                            />
-                          );
-                        })()}
-                      </div>
-
-                      <div className="space-y-3">
-                        <p className="text-[11px] font-black uppercase text-indigo-500 tracking-wide">Lựa chọn của bạn:</p>
-                        {shuffledIndices.map((originalIdx) => {
-                          const option = options[originalIdx];
-                          const isSelected = currentAnswer === originalIdx;
-                          const isCorrectOption = originalIdx === Number(currentQ.CorrectAnswer);
-
-                          let styleClass = 'bg-white border-slate-200 hover:bg-slate-50 text-slate-600';
-                          if (isFeedbackActive) {
-                            if (isCorrectOption) {
-                              styleClass = 'bg-green-50 border-green-500 text-green-700 font-bold shadow-sm';
-                            } else if (isSelected) {
-                              styleClass = 'bg-red-50 border-red-500 text-red-700 font-bold shadow-sm';
-                            }
-                          } else if (isSelected) {
-                            styleClass = 'bg-blue-50 border-blue-400 text-blue-700 font-bold shadow-sm';
-                          }
-
-                          return (
-                            <button
-                              key={originalIdx}
-                              disabled={isFeedbackActive}
-                              onClick={() => handleSelectAnswer(currentQ.QuestionID, originalIdx)}
-                              className={`w-full text-left p-3.5 rounded-xl border text-xs transition-all duration-200 flex items-center justify-between ${
-                                isFeedbackActive ? 'cursor-default' : 'cursor-pointer'
-                              } ${styleClass}`}
-                            >
-                              <span>{option}</span>
-                              <span
-                                className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                                  isFeedbackActive
-                                    ? isCorrectOption
-                                      ? 'border-green-500 bg-green-500 text-white'
-                                      : isSelected
-                                        ? 'border-red-500 bg-red-500 text-white'
-                                        : 'border-slate-300'
-                                    : isSelected
-                                      ? 'border-blue-500 bg-blue-500 text-white'
-                                      : 'border-slate-300'
-                                }`}
-                              >
-                                {isFeedbackActive ? (
-                                  isCorrectOption ? (
-                                    <Check className="w-3 h-3 stroke-[3]" />
-                                  ) : isSelected ? (
-                                    <X className="w-3 h-3 stroke-[3]" />
-                                  ) : null
-                                ) : (
-                                  isSelected && <Check className="w-3 h-3 stroke-[3]" />
-                                )}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()}
 
                 {/* 8. CATEGORIZATION */}
                 {currentQ.QuestionType === 'Categorization' && parsedAnswers.categoryItems && parsedAnswers.categories && (

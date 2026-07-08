@@ -53,6 +53,17 @@ const parseVideoUrl = (urlStr: string) => {
       }
     }
     
+    if (hostname.includes('vimeo.com')) {
+      const parts = url.pathname.split('/');
+      const videoId = parts[parts.length - 1] || parts[parts.length - 2];
+      if (videoId && /^\d+$/.test(videoId)) {
+        return {
+          type: 'vimeo',
+          url: `https://player.vimeo.com/video/${videoId}`
+        };
+      }
+    }
+    
     if (url.protocol === 'http:' || url.protocol === 'https:') {
       return {
         type: 'direct',
@@ -109,6 +120,8 @@ export default function QuestionsPage() {
   // For Ordering
   const [sequenceList, setSequenceList] = useState<string[]>(['', '', '']);
   const [seqDragIndex, setSeqDragIndex] = useState<number | null>(null);
+  const [seqHoverIndex, setSeqHoverIndex] = useState<number | null>(null);
+  const [seqDragHeight, setSeqDragHeight] = useState<number>(54);
   const [seqDragY, setSeqDragY] = useState<number>(0);
   const seqDragStartRef = useRef<{ y: number; index: number } | null>(null);
   const seqRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -1314,7 +1327,7 @@ export default function QuestionsPage() {
                     }
                     return (
                       <div className="mt-2.5 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden aspect-video relative shadow-inner flex items-center justify-center">
-                        {parsed.type === 'youtube' ? (
+                        {parsed.type === 'youtube' || parsed.type === 'vimeo' ? (
                           <iframe
                             src={parsed.url}
                             className="w-full h-full"
@@ -1564,112 +1577,135 @@ export default function QuestionsPage() {
                   </div>
                 )}
 
-                {/* Sequence Ordering */}
-                {qType === 'Sequence Ordering' && (() => {
-                  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>, idx: number) => {
-                    e.currentTarget.setPointerCapture(e.pointerId);
-                    seqDragStartRef.current = { y: e.clientY, index: idx };
-                    setSeqDragIndex(idx);
-                    setSeqDragY(0);
-                  };
+                 {/* Sequence Ordering */}
+                 {qType === 'Sequence Ordering' && (() => {
+                   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>, idx: number) => {
+                     e.currentTarget.setPointerCapture(e.pointerId);
+                     seqDragStartRef.current = { y: e.clientY, index: idx };
+                     setSeqDragIndex(idx);
+                     setSeqHoverIndex(idx);
+                     setSeqDragY(0);
+                     // Safely measure container height in event handler
+                     const container = e.currentTarget.closest('.border');
+                     const height = container?.getBoundingClientRect().height || 54;
+                     setSeqDragHeight(height);
+                   };
+ 
+                   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>, idx: number) => {
+                     if (seqDragIndex !== idx || !seqDragStartRef.current) return;
+                     const dy = e.clientY - seqDragStartRef.current.y;
+                     setSeqDragY(dy);
+ 
+                     // Calculate hover index based on pointer's clientY
+                     const clientY = e.clientY;
+                     const els = seqRefs.current;
+                     let targetIdx = idx;
+                     
+                     for (let i = 0; i < sequenceList.length; i++) {
+                       const el = els[i];
+                       if (!el || i === idx) continue;
+                       const rect = el.getBoundingClientRect();
+                       const middleY = rect.top + rect.height / 2;
+                       
+                       if (clientY < middleY && i < targetIdx) {
+                         targetIdx = i;
+                         break;
+                       }
+                       if (clientY > middleY && i > targetIdx) {
+                         targetIdx = i;
+                       }
+                     }
+                     if (targetIdx !== seqHoverIndex) {
+                       setSeqHoverIndex(targetIdx);
+                     }
+                   };
+ 
+                   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+                     if (seqDragIndex === null) return;
+                     try {
+                       e.currentTarget.releasePointerCapture(e.pointerId);
+                     } catch (err) {}
 
-                  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>, idx: number) => {
-                    if (seqDragIndex !== idx || !seqDragStartRef.current) return;
-                    const dy = e.clientY - seqDragStartRef.current.y;
-                    setSeqDragY(dy);
+                     // Apply the final reordered list state on drop
+                     if (seqHoverIndex !== null && seqHoverIndex !== seqDragIndex) {
+                       const newList = [...sequenceList];
+                       const [draggedItem] = newList.splice(seqDragIndex, 1);
+                       newList.splice(seqHoverIndex, 0, draggedItem);
+                       setSequenceList(newList);
+                     }
+ 
+                     setSeqDragIndex(null);
+                     setSeqHoverIndex(null);
+                     seqDragStartRef.current = null;
+                   };
+ 
+                   return (
+                     <div className="space-y-3">
+                       <div className="flex justify-between items-center">
+                         <label className="text-[10px] text-slate-400 font-bold uppercase">DANH SÁCH BƯỚC THEO THỨ TỰ ĐÚNG (HỆ THỐNG SẼ TỰ ĐẢO TRỘN KHI THI - KÉO THẢ TAY CẦM ĐỂ ĐỔI VỊ TRÍ)</label>
+                         <button
+                           type="button"
+                           onClick={() => setSequenceList([...sequenceList, ''])}
+                           className="text-[10px] text-blue-500 hover:underline cursor-pointer font-bold"
+                         >
+                           + Thêm bước tiếp theo
+                         </button>
+                       </div>
+ 
+                       <div className="space-y-2 relative select-none">
+                         {sequenceList.map((item, idx) => {
+                           const isDragging = seqDragIndex === idx;
 
-                    const currentIdx = seqDragStartRef.current.index;
-                    const currentEl = seqRefs.current[currentIdx];
-                    if (currentEl) {
-                      const rect = currentEl.getBoundingClientRect();
-                      const itemHeight = rect.height;
+                           let transformStyle = 'none';
+                           let transitionStyle = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
+                           
+                           if (seqDragIndex !== null && seqHoverIndex !== null) {
+                             if (isDragging) {
+                               transformStyle = `translateY(${seqDragY}px)`;
+                               transitionStyle = 'none';
+                             } else {
+                               const gap = 8;
+                               const totalShift = seqDragHeight + gap;
+                               
+                               if (seqDragIndex < seqHoverIndex) {
+                                 if (idx > seqDragIndex && idx <= seqHoverIndex) {
+                                   transformStyle = `translateY(${-totalShift}px)`;
+                                 }
+                               } else if (seqDragIndex > seqHoverIndex) {
+                                 if (idx < seqDragIndex && idx >= seqHoverIndex) {
+                                   transformStyle = `translateY(${totalShift}px)`;
+                                 }
+                               }
+                             }
+                           }
 
-                      // Dragging down
-                      if (dy > itemHeight * 0.6 && currentIdx < sequenceList.length - 1) {
-                        const newList = [...sequenceList];
-                        const temp = newList[currentIdx];
-                        newList[currentIdx] = newList[currentIdx + 1];
-                        newList[currentIdx + 1] = temp;
-
-                        setSequenceList(newList);
-
-                        seqDragStartRef.current = {
-                          y: seqDragStartRef.current.y + itemHeight,
-                          index: currentIdx + 1
-                        };
-                        setSeqDragIndex(currentIdx + 1);
-                        setSeqDragY(e.clientY - seqDragStartRef.current.y);
-                      }
-                      // Dragging up
-                      else if (dy < -itemHeight * 0.6 && currentIdx > 0) {
-                        const newList = [...sequenceList];
-                        const temp = newList[currentIdx];
-                        newList[currentIdx] = newList[currentIdx - 1];
-                        newList[currentIdx - 1] = temp;
-
-                        setSequenceList(newList);
-
-                        seqDragStartRef.current = {
-                          y: seqDragStartRef.current.y - itemHeight,
-                          index: currentIdx - 1
-                        };
-                        setSeqDragIndex(currentIdx - 1);
-                        setSeqDragY(e.clientY - seqDragStartRef.current.y);
-                      }
-                    }
-                  };
-
-                  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-                    if (seqDragIndex === null) return;
-                    try {
-                      e.currentTarget.releasePointerCapture(e.pointerId);
-                    } catch (err) {}
-                    setSeqDragIndex(null);
-                    seqDragStartRef.current = null;
-                  };
-
-                  return (
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <label className="text-[10px] text-slate-400 font-bold uppercase">DANH SÁCH BƯỚC THEO THỨ TỰ ĐÚNG (HỆ THỐNG SẼ TỰ ĐẢO TRỘN KHI THI - KÉO THẢ TAY CẦM ĐỂ ĐỔI VỊ TRÍ)</label>
-                        <button
-                          type="button"
-                          onClick={() => setSequenceList([...sequenceList, ''])}
-                          className="text-[10px] text-blue-500 hover:underline cursor-pointer font-bold"
-                        >
-                          + Thêm bước tiếp theo
-                        </button>
-                      </div>
-
-                      <div className="space-y-2 relative select-none">
-                        {sequenceList.map((item, idx) => {
-                          const isDragging = seqDragIndex === idx;
-                          return (
-                            <div
-                              key={idx}
-                              ref={(el) => {
-                                seqRefs.current[idx] = el;
-                              }}
-                              style={{
-                                transform: isDragging ? `translateY(${seqDragY}px)` : 'none',
-                                zIndex: isDragging ? 50 : 'auto',
-                              }}
-                              className={`flex gap-3 items-center p-2 border rounded-xl transition-shadow ${
-                                isDragging ? 'bg-blue-50/90 border-blue-400 shadow-md scale-[1.01]' : 'bg-white border-slate-100'
-                              }`}
-                            >
-                              {/* Drag Handle */}
-                              <div
-                                onPointerDown={(e) => handlePointerDown(e, idx)}
-                                onPointerMove={(e) => handlePointerMove(e, idx)}
-                                onPointerUp={handlePointerUp}
-                                onPointerCancel={handlePointerUp}
-                                style={{ touchAction: 'none' }}
-                                className="p-1.5 hover:bg-slate-50 rounded-lg cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 transition-colors shrink-0"
-                                title="Kéo thả để sắp xếp"
-                              >
-                                <GripVertical className="w-4 h-4" />
-                              </div>
+                           return (
+                             <div
+                               key={idx}
+                               ref={(el) => {
+                                 seqRefs.current[idx] = el;
+                               }}
+                               style={{
+                                 transform: transformStyle,
+                                 transition: transitionStyle,
+                                 zIndex: isDragging ? 50 : 'auto',
+                               }}
+                               className={`flex gap-3 items-center p-2 border rounded-xl transition-shadow ${
+                                 isDragging ? 'bg-blue-50/90 border-blue-400 shadow-md scale-[1.01]' : 'bg-white border-slate-100'
+                               }`}
+                             >
+                               {/* Drag Handle */}
+                               <div
+                                 onPointerDown={(e) => handlePointerDown(e, idx)}
+                                 onPointerMove={(e) => handlePointerMove(e, idx)}
+                                 onPointerUp={handlePointerUp}
+                                 onPointerCancel={handlePointerUp}
+                                 style={{ touchAction: 'none' }}
+                                 className="p-1.5 hover:bg-slate-50 rounded-lg cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+                                 title="Kéo thả để sắp xếp"
+                               >
+                                 <GripVertical className="w-4 h-4" />
+                               </div>
 
                               <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center font-bold text-[10px] text-slate-500 shrink-0 select-none">
                                 {idx + 1}
