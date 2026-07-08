@@ -16,7 +16,54 @@ import {
   Video,
   ListOrdered,
   Grid,
+  GripVertical,
 } from 'lucide-react';
+
+const parseVideoUrl = (urlStr: string) => {
+  if (!urlStr) return null;
+  const trimmed = urlStr.trim();
+  if (!trimmed) return null;
+  
+  try {
+    const url = new URL(trimmed);
+    const hostname = url.hostname.toLowerCase();
+    
+    if (
+      hostname.includes('youtube.com') ||
+      hostname.includes('youtu.be') ||
+      hostname.includes('youtube-nocookie.com')
+    ) {
+      let videoId: string | null = null;
+      if (hostname.includes('youtu.be')) {
+        videoId = url.pathname.substring(1);
+      } else if (url.pathname.startsWith('/embed/')) {
+        videoId = url.pathname.split('/')[2];
+      } else if (url.pathname.startsWith('/v/')) {
+        videoId = url.pathname.split('/')[2];
+      } else {
+        videoId = url.searchParams.get('v');
+      }
+      
+      if (videoId) {
+        const cleanId = videoId.split('&')[0];
+        return {
+          type: 'youtube',
+          url: `https://www.youtube.com/embed/${cleanId}`
+        };
+      }
+    }
+    
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      return {
+        type: 'direct',
+        url: trimmed
+      };
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
 
 export default function QuestionsPage() {
   const { syncTrigger, onSyncComplete } = useAdmin();
@@ -61,6 +108,10 @@ export default function QuestionsPage() {
 
   // For Ordering
   const [sequenceList, setSequenceList] = useState<string[]>(['', '', '']);
+  const [seqDragIndex, setSeqDragIndex] = useState<number | null>(null);
+  const [seqDragY, setSeqDragY] = useState<number>(0);
+  const seqDragStartRef = useRef<{ y: number; index: number } | null>(null);
+  const seqRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // For Statement True/False Multiple
   const [stmtRows, setStmtRows] = useState<{ text: string; correct: boolean }[]>([{ text: '', correct: true }]);
@@ -1252,6 +1303,35 @@ export default function QuestionsPage() {
                     onChange={(e) => setQVideoUrl(e.target.value)}
                     className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none text-slate-700 bg-slate-50/50 font-semibold"
                   />
+                  {qVideoUrl.trim() && (() => {
+                    const parsed = parseVideoUrl(qVideoUrl);
+                    if (!parsed) {
+                      return (
+                        <p className="text-[11px] text-red-500 font-bold mt-1.5 animate-pulse">
+                          Video URL không hợp lệ.
+                        </p>
+                      );
+                    }
+                    return (
+                      <div className="mt-2.5 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden aspect-video relative shadow-inner flex items-center justify-center">
+                        {parsed.type === 'youtube' ? (
+                          <iframe
+                            src={parsed.url}
+                            className="w-full h-full"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            title="Video Preview"
+                          />
+                        ) : (
+                          <video
+                            src={parsed.url}
+                            controls
+                            className="w-full h-full object-contain"
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1485,49 +1565,145 @@ export default function QuestionsPage() {
                 )}
 
                 {/* Sequence Ordering */}
-                {qType === 'Sequence Ordering' && (
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <label className="text-[10px] text-slate-400">DANH SÁCH BƯỚC THEO THỨ TỰ ĐÚNG (HỆ THỐNG SẼ TỰ ĐẢO TRỘN KHI THI)</label>
-                      <button
-                        type="button"
-                        onClick={() => setSequenceList([...sequenceList, ''])}
-                        className="text-[10px] text-blue-500 hover:underline cursor-pointer font-bold"
-                      >
-                        + Thêm bước tiếp theo
-                      </button>
-                    </div>
+                {qType === 'Sequence Ordering' && (() => {
+                  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>, idx: number) => {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    seqDragStartRef.current = { y: e.clientY, index: idx };
+                    setSeqDragIndex(idx);
+                    setSeqDragY(0);
+                  };
 
-                    {sequenceList.map((item, idx) => (
-                      <div key={idx} className="flex gap-3 items-center">
-                        <span className="w-5 h-5 rounded-full bg-slate-200/80 flex items-center justify-center font-bold text-[10px] text-slate-600 shrink-0 select-none">
-                          {idx + 1}
-                        </span>
-                        <input
-                          type="text"
-                          required
-                          value={item}
-                          onChange={(e) => {
-                            const updated = [...sequenceList];
-                            updated[idx] = e.target.value;
-                            setSequenceList(updated);
-                          }}
-                          placeholder={`Nội dung bước thứ ${idx + 1}`}
-                          className="flex-1 px-3 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none text-slate-700 font-bold"
-                        />
-                        {sequenceList.length > 2 && (
-                          <button
-                            type="button"
-                            onClick={() => setSequenceList(sequenceList.filter((_, i) => i !== idx))}
-                            className="p-1.5 text-red-500 hover:bg-red-50 rounded"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
+                  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>, idx: number) => {
+                    if (seqDragIndex !== idx || !seqDragStartRef.current) return;
+                    const dy = e.clientY - seqDragStartRef.current.y;
+                    setSeqDragY(dy);
+
+                    const currentIdx = seqDragStartRef.current.index;
+                    const currentEl = seqRefs.current[currentIdx];
+                    if (currentEl) {
+                      const rect = currentEl.getBoundingClientRect();
+                      const itemHeight = rect.height;
+
+                      // Dragging down
+                      if (dy > itemHeight * 0.6 && currentIdx < sequenceList.length - 1) {
+                        const newList = [...sequenceList];
+                        const temp = newList[currentIdx];
+                        newList[currentIdx] = newList[currentIdx + 1];
+                        newList[currentIdx + 1] = temp;
+
+                        setSequenceList(newList);
+
+                        seqDragStartRef.current = {
+                          y: seqDragStartRef.current.y + itemHeight,
+                          index: currentIdx + 1
+                        };
+                        setSeqDragIndex(currentIdx + 1);
+                        setSeqDragY(e.clientY - seqDragStartRef.current.y);
+                      }
+                      // Dragging up
+                      else if (dy < -itemHeight * 0.6 && currentIdx > 0) {
+                        const newList = [...sequenceList];
+                        const temp = newList[currentIdx];
+                        newList[currentIdx] = newList[currentIdx - 1];
+                        newList[currentIdx - 1] = temp;
+
+                        setSequenceList(newList);
+
+                        seqDragStartRef.current = {
+                          y: seqDragStartRef.current.y - itemHeight,
+                          index: currentIdx - 1
+                        };
+                        setSeqDragIndex(currentIdx - 1);
+                        setSeqDragY(e.clientY - seqDragStartRef.current.y);
+                      }
+                    }
+                  };
+
+                  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+                    if (seqDragIndex === null) return;
+                    try {
+                      e.currentTarget.releasePointerCapture(e.pointerId);
+                    } catch (err) {}
+                    setSeqDragIndex(null);
+                    seqDragStartRef.current = null;
+                  };
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] text-slate-400 font-bold uppercase">DANH SÁCH BƯỚC THEO THỨ TỰ ĐÚNG (HỆ THỐNG SẼ TỰ ĐẢO TRỘN KHI THI - KÉO THẢ TAY CẦM ĐỂ ĐỔI VỊ TRÍ)</label>
+                        <button
+                          type="button"
+                          onClick={() => setSequenceList([...sequenceList, ''])}
+                          className="text-[10px] text-blue-500 hover:underline cursor-pointer font-bold"
+                        >
+                          + Thêm bước tiếp theo
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                )}
+
+                      <div className="space-y-2 relative select-none">
+                        {sequenceList.map((item, idx) => {
+                          const isDragging = seqDragIndex === idx;
+                          return (
+                            <div
+                              key={idx}
+                              ref={(el) => {
+                                seqRefs.current[idx] = el;
+                              }}
+                              style={{
+                                transform: isDragging ? `translateY(${seqDragY}px)` : 'none',
+                                zIndex: isDragging ? 50 : 'auto',
+                              }}
+                              className={`flex gap-3 items-center p-2 border rounded-xl transition-shadow ${
+                                isDragging ? 'bg-blue-50/90 border-blue-400 shadow-md scale-[1.01]' : 'bg-white border-slate-100'
+                              }`}
+                            >
+                              {/* Drag Handle */}
+                              <div
+                                onPointerDown={(e) => handlePointerDown(e, idx)}
+                                onPointerMove={(e) => handlePointerMove(e, idx)}
+                                onPointerUp={handlePointerUp}
+                                onPointerCancel={handlePointerUp}
+                                style={{ touchAction: 'none' }}
+                                className="p-1.5 hover:bg-slate-50 rounded-lg cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+                                title="Kéo thả để sắp xếp"
+                              >
+                                <GripVertical className="w-4 h-4" />
+                              </div>
+
+                              <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center font-bold text-[10px] text-slate-500 shrink-0 select-none">
+                                {idx + 1}
+                              </span>
+
+                              <input
+                                type="text"
+                                required
+                                value={item}
+                                onChange={(e) => {
+                                  const updated = [...sequenceList];
+                                  updated[idx] = e.target.value;
+                                  setSequenceList(updated);
+                                }}
+                                placeholder={`Nội dung bước thứ ${idx + 1}`}
+                                className="flex-1 px-3 py-1.5 border border-slate-200 rounded-xl bg-white focus:outline-none text-slate-700 font-semibold text-xs"
+                              />
+
+                              {sequenceList.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSequenceList(sequenceList.filter((_, i) => i !== idx))}
+                                  className="p-1.5 text-red-500 hover:bg-red-50 rounded shrink-0 cursor-pointer"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* True/False Multiple */}
                 {qType === 'True/False Multiple' && (

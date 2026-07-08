@@ -3,8 +3,54 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Exam, Question, ScoreRecord, QuestionAnswers } from '@/lib/types';
 import { DatabaseService } from '@/lib/database-service';
-import { Check, X, Clock, Award, AlertCircle, ArrowLeft, ArrowRight, Save, Play, RefreshCw, Volume2, HelpCircle, Flag } from 'lucide-react';
+import { Check, X, Clock, Award, AlertCircle, ArrowLeft, ArrowRight, Save, Play, RefreshCw, Volume2, HelpCircle, Flag, GripVertical } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+const parseVideoUrl = (urlStr: string) => {
+  if (!urlStr) return null;
+  const trimmed = urlStr.trim();
+  if (!trimmed) return null;
+  
+  try {
+    const url = new URL(trimmed);
+    const hostname = url.hostname.toLowerCase();
+    
+    if (
+      hostname.includes('youtube.com') ||
+      hostname.includes('youtu.be') ||
+      hostname.includes('youtube-nocookie.com')
+    ) {
+      let videoId: string | null = null;
+      if (hostname.includes('youtu.be')) {
+        videoId = url.pathname.substring(1);
+      } else if (url.pathname.startsWith('/embed/')) {
+        videoId = url.pathname.split('/')[2];
+      } else if (url.pathname.startsWith('/v/')) {
+        videoId = url.pathname.split('/')[2];
+      } else {
+        videoId = url.searchParams.get('v');
+      }
+      
+      if (videoId) {
+        const cleanId = videoId.split('&')[0];
+        return {
+          type: 'youtube',
+          url: `https://www.youtube.com/embed/${cleanId}`
+        };
+      }
+    }
+    
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      return {
+        type: 'direct',
+        url: trimmed
+      };
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
 
 interface QuizPlayerProps {
   exam: Exam;
@@ -32,6 +78,12 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   const [feedbackIsCorrect, setFeedbackIsCorrect] = useState(false);
   const [submittedQuestions, setSubmittedQuestions] = useState<Record<string, { isCorrect: boolean }>>({});
   const [isReviewMode, setIsReviewMode] = useState(false);
+
+  // Drag and drop state for sequence ordering
+  const [seqDragIndex, setSeqDragIndex] = useState<number | null>(null);
+  const [seqDragY, setSeqDragY] = useState<number>(0);
+  const seqDragStartRef = useRef<{ y: number; index: number } | null>(null);
+  const seqRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // State reference for keyboard keydown event handlers
   const keyHandlerStateRef = useRef<any>(null);
@@ -1331,80 +1383,133 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                     console.error(e);
                   }
 
+                  const list = currentAnswer || [];
+
+                  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>, idx: number) => {
+                    if (isFeedbackActive) return;
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    seqDragStartRef.current = { y: e.clientY, index: idx };
+                    setSeqDragIndex(idx);
+                    setSeqDragY(0);
+                  };
+
+                  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>, idx: number) => {
+                    if (seqDragIndex !== idx || !seqDragStartRef.current) return;
+                    const dy = e.clientY - seqDragStartRef.current.y;
+                    setSeqDragY(dy);
+
+                    const currentIdx = seqDragStartRef.current.index;
+                    const currentEl = seqRefs.current[currentIdx];
+                    if (currentEl) {
+                      const rect = currentEl.getBoundingClientRect();
+                      const itemHeight = rect.height;
+
+                      // Dragging down
+                      if (dy > itemHeight * 0.6 && currentIdx < list.length - 1) {
+                        const newList = [...list];
+                        const temp = newList[currentIdx];
+                        newList[currentIdx] = newList[currentIdx + 1];
+                        newList[currentIdx + 1] = temp;
+
+                        handleSelectAnswer(currentQ.QuestionID, newList);
+
+                        seqDragStartRef.current = {
+                          y: seqDragStartRef.current.y + itemHeight,
+                          index: currentIdx + 1
+                        };
+                        setSeqDragIndex(currentIdx + 1);
+                        setSeqDragY(e.clientY - seqDragStartRef.current.y);
+                      }
+                      // Dragging up
+                      else if (dy < -itemHeight * 0.6 && currentIdx > 0) {
+                        const newList = [...list];
+                        const temp = newList[currentIdx];
+                        newList[currentIdx] = newList[currentIdx - 1];
+                        newList[currentIdx - 1] = temp;
+
+                        handleSelectAnswer(currentQ.QuestionID, newList);
+
+                        seqDragStartRef.current = {
+                          y: seqDragStartRef.current.y - itemHeight,
+                          index: currentIdx - 1
+                        };
+                        setSeqDragIndex(currentIdx - 1);
+                        setSeqDragY(e.clientY - seqDragStartRef.current.y);
+                      }
+                    }
+                  };
+
+                  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+                    if (seqDragIndex === null) return;
+                    try {
+                      e.currentTarget.releasePointerCapture(e.pointerId);
+                    } catch (err) {}
+                    setSeqDragIndex(null);
+                    seqDragStartRef.current = null;
+                  };
+
                   return (
                     <div className="space-y-3">
                       <p className="text-xs text-blue-600 font-bold bg-blue-50 p-2.5 rounded-lg mb-3">
-                        💡 Sử dụng các phím mũi tên để sắp xếp danh sách các bước theo thứ tự đúng nhất (từ trên xuống dưới):
+                        💡 Kéo và thả các bước bên dưới để sắp xếp theo thứ tự đúng nhất (từ trên xuống dưới):
                       </p>
 
-                      <div className="space-y-2">
-                        {(currentAnswer || []).map((item: string, idx: number) => {
+                      <div className="space-y-2 relative select-none">
+                        {list.map((item: string, idx: number) => {
                           const correctItemText = sequenceItems[correctOrder[idx]];
                           const isItemCorrect = item === correctItemText;
+                          const isDragging = seqDragIndex === idx;
 
-                          let styleClass = 'bg-white border-slate-200 text-slate-700';
+                          let styleClass = 'bg-white border-slate-200 text-slate-700 hover:border-slate-300';
                           if (isFeedbackActive) {
                             if (isItemCorrect) {
                               styleClass = 'bg-green-50 border-green-300 text-green-800';
                             } else {
                               styleClass = 'bg-red-50 border-red-300 text-red-800';
                             }
+                          } else if (isDragging) {
+                            styleClass = 'bg-blue-50/90 border-blue-400 text-blue-800 scale-[1.02] shadow-lg';
                           }
 
                           return (
                             <div
                               key={idx}
-                              className={`flex items-center gap-3 p-3 border rounded-xl shadow-sm text-xs transition-colors ${styleClass}`}
+                              ref={(el) => {
+                                seqRefs.current[idx] = el;
+                              }}
+                              onPointerDown={(e) => handlePointerDown(e, idx)}
+                              onPointerMove={(e) => handlePointerMove(e, idx)}
+                              onPointerUp={handlePointerUp}
+                              onPointerCancel={handlePointerUp}
+                              style={{
+                                transform: isDragging ? `translateY(${seqDragY}px)` : 'none',
+                                zIndex: isDragging ? 50 : 'auto',
+                                touchAction: 'none',
+                              }}
+                              className={`flex items-center gap-3 p-3.5 border rounded-xl shadow-sm text-xs transition-shadow cursor-grab active:cursor-grabbing ${styleClass}`}
                             >
+                              {!isFeedbackActive && (
+                                <GripVertical className="w-4 h-4 text-slate-400 shrink-0" />
+                              )}
                               <span className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
                                 isFeedbackActive
                                   ? isItemCorrect
                                     ? 'bg-green-200 text-green-800'
                                     : 'bg-red-200 text-red-800'
-                                  : 'bg-blue-100 text-blue-700'
+                                  : isDragging
+                                    ? 'bg-blue-200 text-blue-800 animate-pulse'
+                                    : 'bg-blue-100 text-blue-700'
                               }`}>
                                 {idx + 1}
                               </span>
-                              <div className="flex-1 flex flex-col">
-                                <span className="font-semibold">{item}</span>
+                              <div className="flex-1 flex flex-col pointer-events-none select-none">
+                                <span className="font-bold text-[13px] leading-relaxed">{item}</span>
                                 {isFeedbackActive && !isItemCorrect && (
                                   <span className="text-[10px] text-green-600 font-black mt-0.5">
                                     ✓ Đúng ra là: {correctItemText}
                                   </span>
                                 )}
                               </div>
-
-                              {/* Quick movement controls */}
-                              {!isFeedbackActive && (
-                                <div className="flex gap-1">
-                                  <button
-                                    disabled={idx === 0}
-                                    onClick={() => {
-                                      const arr = [...(currentAnswer || [])];
-                                      const temp = arr[idx];
-                                      arr[idx] = arr[idx - 1];
-                                      arr[idx - 1] = temp;
-                                      handleSelectAnswer(currentQ.QuestionID, arr);
-                                    }}
-                                    className="px-2 py-1 bg-slate-100 border border-slate-200 rounded text-[10px] hover:bg-slate-200 disabled:opacity-30 font-extrabold cursor-pointer select-none"
-                                  >
-                                    ▲ Lên
-                                  </button>
-                                  <button
-                                    disabled={idx === (currentAnswer || []).length - 1}
-                                    onClick={() => {
-                                      const arr = [...(currentAnswer || [])];
-                                      const temp = arr[idx];
-                                      arr[idx] = arr[idx + 1];
-                                      arr[idx + 1] = temp;
-                                      handleSelectAnswer(currentQ.QuestionID, arr);
-                                    }}
-                                    className="px-2 py-1 bg-slate-100 border border-slate-200 rounded text-[10px] hover:bg-slate-200 disabled:opacity-30 font-extrabold cursor-pointer select-none"
-                                  >
-                                    ▼ Xuống
-                                  </button>
-                                </div>
-                              )}
                             </div>
                           );
                         })}
@@ -1529,7 +1634,34 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                   return (
                     <div className="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                       <div className="bg-slate-900 rounded-2xl overflow-hidden aspect-video relative shadow-inner border border-slate-800 flex items-center justify-center">
-                        <video src={currentQ.Video} controls className="w-full h-full object-contain" />
+                        {(() => {
+                          const parsed = parseVideoUrl(currentQ.Video);
+                          if (!parsed) {
+                            return (
+                              <p className="text-xs text-slate-400 p-4">
+                                Video URL không hợp lệ hoặc không được hỗ trợ.
+                              </p>
+                            );
+                          }
+                          if (parsed.type === 'youtube') {
+                            return (
+                              <iframe
+                                src={parsed.url}
+                                className="w-full h-full"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                title="Video Player"
+                              />
+                            );
+                          }
+                          return (
+                            <video
+                              src={parsed.url}
+                              controls
+                              className="w-full h-full object-contain"
+                            />
+                          );
+                        })()}
                       </div>
 
                       <div className="space-y-3">
