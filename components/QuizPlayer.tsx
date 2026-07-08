@@ -95,6 +95,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   const [seqHoverIndex, setSeqHoverIndex] = useState<number | null>(null);
   const [seqDragHeight, setSeqDragHeight] = useState<number>(54);
   const [seqDragY, setSeqDragY] = useState<number>(0);
+  const [seqInteracted, setSeqInteracted] = useState<Record<string, boolean>>({});
   const seqDragStartRef = useRef<{ y: number; index: number } | null>(null);
   const seqRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -370,6 +371,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
           }
         });
         setAnswersState(initialAnswers);
+        setSeqInteracted({});
 
         // Run progressive simulated preparation loader:
         setPrepStep(1);
@@ -791,6 +793,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
         }
       });
       setAnswersState(initialAnswers);
+      setSeqInteracted({});
       setSubmittedQuestions({});
       return;
     }
@@ -1484,6 +1487,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                       const [draggedItem] = newList.splice(seqDragIndex, 1);
                       newList.splice(seqHoverIndex, 0, draggedItem);
                       handleSelectAnswer(currentQ.QuestionID, newList);
+                      setSeqInteracted(prev => ({ ...prev, [currentQ.QuestionID]: true }));
                     }
 
                     setSeqDragIndex(null);
@@ -2650,6 +2654,9 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                   if (Array.isArray(ans)) {
                     if (q.QuestionType?.toLowerCase() === 'match image to text') {
                       return ans.some(v => v !== null && v !== undefined);
+                    }
+                    if (q.QuestionType === 'Sequence Ordering') {
+                      return !!seqInteracted[q.QuestionID];
                     }
                     return ans.length > 0;
                   }
