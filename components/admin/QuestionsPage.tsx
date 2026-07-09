@@ -85,6 +85,7 @@ export default function QuestionsPage() {
   const [qLevelFilter, setQLevelFilter] = useState<string>('');
   const [qExamFilter, setQExamFilter] = useState<string>('');
   const [qTypeFilter, setQTypeFilter] = useState<string>('');
+  const [availableExams, setAvailableExams] = useState<string[]>(['OT1', 'OT2', 'OT3']);
   const [qOffset, setQOffset] = useState(0);
   const [qTotal, setQTotal] = useState(0);
   const qLimit = 5;
@@ -207,7 +208,7 @@ export default function QuestionsPage() {
   const loadQuestions = async () => {
     try {
       // Get filtered list and unfiltered total count in parallel using Promise.all
-      const [filteredRes, unfilteredRes] = await Promise.all([
+      const [filteredRes, unfilteredRes, examsList] = await Promise.all([
         DatabaseService.getQuestions({
           search: qSearch,
           level: qLevelFilter,
@@ -216,11 +217,28 @@ export default function QuestionsPage() {
           limit: qLimit,
           offset: qOffset,
         }),
-        DatabaseService.getQuestions()
+        DatabaseService.getQuestions(),
+        DatabaseService.getExams().catch(() => [])
       ]);
       setQuestions(filteredRes.questions);
       setQTotal(filteredRes.total);
       setTotalQuestionsCount(unfilteredRes.total);
+
+      // Dynamically extract unique ExamIDs
+      const examIdsFromExams = Array.isArray(examsList) ? examsList.map(e => e.ExamID) : [];
+      const examIdsFromQuestions = (unfilteredRes.questions || []).map(q => q.ExamID);
+      
+      const combined = Array.from(new Set([
+        ...examIdsFromExams,
+        ...examIdsFromQuestions
+      ]))
+        .map(id => id?.trim().toUpperCase())
+        .filter(id => id)
+        .sort();
+      
+      if (combined.length > 0) {
+        setAvailableExams(combined);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -1092,9 +1110,11 @@ export default function QuestionsPage() {
             className="px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white font-bold text-slate-500"
           >
             <option value="">Tất cả Đề</option>
-            <option value="OT1">OT1</option>
-            <option value="OT2">OT2</option>
-            <option value="OT3">OT3</option>
+            {availableExams.map((exam) => (
+              <option key={exam} value={exam}>
+                {exam}
+              </option>
+            ))}
           </select>
 
           {/* Filter Type */}
