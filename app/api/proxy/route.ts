@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    let targetUrlString = searchParams.get('url') || process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || process.env.APPS_SCRIPT_URL;
+    
+    // Read from secure HTTP-Only cookie, server env var, or fallback to query param
+    const cookieStore = await cookies();
+    const cookieUrl = cookieStore.get('APPS_SCRIPT_URL')?.value;
+    let targetUrlString = cookieUrl || process.env.APPS_SCRIPT_URL || process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || searchParams.get('url');
+
     if (!targetUrlString) {
       return NextResponse.json({ success: false, message: 'Missing target URL' }, { status: 400 });
     }
@@ -56,7 +62,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    let targetUrlString = searchParams.get('url') || process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || process.env.APPS_SCRIPT_URL;
+    
+    // Read from secure HTTP-Only cookie, server env var, or fallback to query param
+    const cookieStore = await cookies();
+    const cookieUrl = cookieStore.get('APPS_SCRIPT_URL')?.value;
+    let targetUrlString = cookieUrl || process.env.APPS_SCRIPT_URL || process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || searchParams.get('url');
+
     if (!targetUrlString) {
       return NextResponse.json({ success: false, message: 'Missing target URL' }, { status: 400 });
     }

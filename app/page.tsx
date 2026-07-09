@@ -69,7 +69,7 @@ export default function Home() {
     DatabaseService.initLocalStorage();
     const config = DatabaseService.getSyncConfig();
     const appsScriptUrl = config.appsScriptUrl;
-    setSettingsUrl(appsScriptUrl || '');
+    setSettingsUrl(appsScriptUrl === 'configured_on_server' ? '' : appsScriptUrl || '');
 
     if (!currentUser || userRole !== 'Student') {
       // Background non-blocking sync for admin only
@@ -334,6 +334,15 @@ export default function Home() {
     setConnectionMsg({ type: '', message: '' });
 
     if (!settingsUrl.trim()) {
+      try {
+        await fetch('/api/proxy/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: '' }),
+        });
+      } catch (e) {
+        console.warn('Failed to clear cookie:', e);
+      }
       DatabaseService.saveSyncConfig('');
       setConnectionMsg({ type: 'success', message: 'Đã xóa cấu hình. Hệ thống chuyển về chế độ Database Local.' });
       setTestingConnection(false);
@@ -497,10 +506,17 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="block mb-1.5 text-slate-600">Google Apps Script Web App URL</label>
+                <label className="block mb-1.5 text-slate-600 flex items-center justify-between">
+                  <span>Google Apps Script Web App URL</span>
+                  {!!DatabaseService.getSyncConfig().appsScriptUrl && (
+                    <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 font-extrabold flex items-center gap-0.5">
+                      ● Đã kết nối bảo mật (F12-Safe)
+                    </span>
+                  )}
+                </label>
                 <input
                   type="url"
-                  placeholder="https://script.google.com/macros/s/.../exec"
+                  placeholder={!!DatabaseService.getSyncConfig().appsScriptUrl ? "Nhập URL mới để cập nhật..." : "https://script.google.com/macros/s/.../exec"}
                   value={settingsUrl}
                   onChange={(e) => setSettingsUrl(e.target.value)}
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none font-bold text-slate-700 bg-slate-50/50 text-xs"
