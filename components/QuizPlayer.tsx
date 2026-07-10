@@ -319,7 +319,10 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
         if (!isSubscribed) return;
 
         // Match exactly the order in the Exam's questionIDs list
-        const orderedQs = exam.QuestionIDs.map((id) => allQs.find((q) => q.QuestionID === id)).filter(Boolean) as Question[];
+        const orderedQs = exam.QuestionIDs.map((id) => {
+          const targetId = id?.trim().toUpperCase();
+          return allQs.find((q) => q.QuestionID?.trim().toUpperCase() === targetId);
+        }).filter(Boolean) as Question[];
 
         // Shuffling logic based on mode: testing is shuffled, training and race are not
         let finalQs = [...orderedQs];

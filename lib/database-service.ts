@@ -185,9 +185,10 @@ export class DatabaseService {
       if (examRes && examRes.success && examRes.data) {
         const localExams = getLocalStorage<Exam[]>(this.KEY_EXAMS, initialExams);
         const mergedExams = examRes.data.map((incoming: any) => {
-          const match = localExams.find((e) => e.ExamID === incoming.ExamID && e.Level === incoming.Level);
+          const match = localExams.find((e) => e.ExamID?.trim().toUpperCase() === incoming.ExamID?.trim().toUpperCase() && e.Level === incoming.Level);
           return {
             ...incoming,
+            ExamID: incoming.ExamID?.trim().toUpperCase(),
             Duration: match && match.Duration !== undefined ? match.Duration : incoming.Duration,
           };
         });
@@ -228,6 +229,8 @@ export class DatabaseService {
       if (questionsRes && questionsRes.success && questionsRes.data) {
         const formattedQuestions = questionsRes.data.map((q: any) => ({
           ...q,
+          ExamID: q.ExamID?.trim().toUpperCase(),
+          QuestionID: q.QuestionID?.trim().toUpperCase(),
           Score: Number(q.Score || 10),
         }));
         setLocalStorage(this.KEY_QUESTIONS, formattedQuestions);
@@ -290,9 +293,10 @@ export class DatabaseService {
       if (examRes && examRes.success && examRes.data) {
         const localExams = getLocalStorage<Exam[]>(this.KEY_EXAMS, initialExams);
         const mergedExams = examRes.data.map((incoming: any) => {
-          const match = localExams.find((e) => e.ExamID === incoming.ExamID && e.Level === incoming.Level);
+          const match = localExams.find((e) => e.ExamID?.trim().toUpperCase() === incoming.ExamID?.trim().toUpperCase() && e.Level === incoming.Level);
           return {
             ...incoming,
+            ExamID: incoming.ExamID?.trim().toUpperCase(),
             Duration: match && match.Duration !== undefined ? match.Duration : incoming.Duration,
           };
         });
@@ -303,6 +307,8 @@ export class DatabaseService {
         // Correct dates and fields
         const formattedQuestions = questionsRes.data.map((q: any) => ({
           ...q,
+          ExamID: q.ExamID?.trim().toUpperCase(),
+          QuestionID: q.QuestionID?.trim().toUpperCase(),
           Score: Number(q.Score || 10),
         }));
         setLocalStorage(this.KEY_QUESTIONS, formattedQuestions);
@@ -441,7 +447,8 @@ export class DatabaseService {
         filtered = filtered.filter(q => q.Level === filters.level);
       }
       if (filters.examId) {
-        filtered = filtered.filter(q => q.ExamID === filters.examId);
+        const targetExamId = filters.examId.trim().toUpperCase();
+        filtered = filtered.filter(q => q.ExamID?.trim().toUpperCase() === targetExamId);
       }
       if (filters.type) {
         filtered = filtered.filter(q => q.QuestionType === filters.type);
@@ -471,37 +478,43 @@ export class DatabaseService {
     this.initLocalStorage();
     const config = this.getSyncConfig();
 
+    const cleanQuestion: Question = {
+      ...question,
+      ExamID: question.ExamID?.trim().toUpperCase(),
+      QuestionID: question.QuestionID?.trim().toUpperCase(),
+    };
+
     // Save locally FIRST (Optimistic)
     const questions = getLocalStorage<Question[]>(this.KEY_QUESTIONS, initialQuestions);
-    const idx = questions.findIndex(q => q.QuestionID === question.QuestionID);
+    const idx = questions.findIndex(q => q.QuestionID === cleanQuestion.QuestionID);
     if (idx !== -1) {
-      questions[idx] = { ...question, CreatedAt: new Date().toISOString() };
+      questions[idx] = { ...cleanQuestion, CreatedAt: new Date().toISOString() };
     } else {
-      questions.push({ ...question, CreatedAt: new Date().toISOString() });
+      questions.push({ ...cleanQuestion, CreatedAt: new Date().toISOString() });
     }
     setLocalStorage(this.KEY_QUESTIONS, questions);
 
     // Also update associated exam sheet local pointer
     const exams = getLocalStorage<Exam[]>(this.KEY_EXAMS, initialExams);
-    const examIdx = exams.findIndex(e => e.ExamID === question.ExamID && e.Level === question.Level);
+    const examIdx = exams.findIndex(e => e.ExamID?.trim().toUpperCase() === cleanQuestion.ExamID && e.Level === cleanQuestion.Level);
     if (examIdx !== -1) {
-      if (!exams[examIdx].QuestionIDs.includes(question.QuestionID)) {
-        exams[examIdx].QuestionIDs.push(question.QuestionID);
+      if (!exams[examIdx].QuestionIDs.includes(cleanQuestion.QuestionID)) {
+        exams[examIdx].QuestionIDs.push(cleanQuestion.QuestionID);
         setLocalStorage(this.KEY_EXAMS, exams);
       }
     } else {
       // create exam local structure if missing
       exams.push({
-        ExamID: question.ExamID,
-        Level: question.Level,
-        QuestionIDs: [question.QuestionID],
+        ExamID: cleanQuestion.ExamID,
+        Level: cleanQuestion.Level,
+        QuestionIDs: [cleanQuestion.QuestionID],
       });
       setLocalStorage(this.KEY_EXAMS, exams);
     }
 
     // Call Google Sheets API in background (fire-and-forget)
     if (config.appsScriptUrl) {
-      this.callAppsScript('saveQuestion', {}, { question })
+      this.callAppsScript('saveQuestion', {}, { question: cleanQuestion })
         .then(() => {
           console.log('Successfully synced saved question to Google Sheets in background');
         })
@@ -517,18 +530,20 @@ export class DatabaseService {
     this.initLocalStorage();
     const config = this.getSyncConfig();
 
+    const targetQuestionId = questionId?.trim().toUpperCase();
+
     // Delete locally FIRST (Optimistic)
     let questions = getLocalStorage<Question[]>(this.KEY_QUESTIONS, initialQuestions);
-    const question = questions.find(q => q.QuestionID === questionId);
-    questions = questions.filter(q => q.QuestionID !== questionId);
+    const question = questions.find(q => q.QuestionID?.trim().toUpperCase() === targetQuestionId);
+    questions = questions.filter(q => q.QuestionID?.trim().toUpperCase() !== targetQuestionId);
     setLocalStorage(this.KEY_QUESTIONS, questions);
 
     if (question) {
       // Remove from associated local exam sheet list
       const exams = getLocalStorage<Exam[]>(this.KEY_EXAMS, initialExams);
-      const examIdx = exams.findIndex(e => e.ExamID === question.ExamID && e.Level === question.Level);
+      const examIdx = exams.findIndex(e => e.ExamID?.trim().toUpperCase() === question.ExamID?.trim().toUpperCase() && e.Level === question.Level);
       if (examIdx !== -1) {
-        exams[examIdx].QuestionIDs = exams[examIdx].QuestionIDs.filter(id => id !== questionId);
+        exams[examIdx].QuestionIDs = exams[examIdx].QuestionIDs.filter(id => id?.trim().toUpperCase() !== targetQuestionId);
         setLocalStorage(this.KEY_EXAMS, exams);
       }
     }
