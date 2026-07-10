@@ -96,6 +96,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { id: 'students', label: 'Quản lý Học sinh', icon: Users, href: '/admin/students' },
                 { id: 'exams', label: 'Quản lý Đề ôn tập', icon: BookOpen, href: '/admin/exams' },
                 { id: 'questions', label: 'Ngân hàng Câu hỏi', icon: HelpCircle, href: '/admin/questions' },
+                { id: 'sync', label: 'Cấu hình hệ thống', icon: Settings, href: '/admin/settings' },
               ].map((tab) => {
                 const Icon = tab.icon;
                 const isSelected = activeTab === tab.id;
