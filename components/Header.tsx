@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseService } from '@/lib/database-service';
 import { SyncConfig } from '@/lib/types';
-import { Database, RefreshCw, LogOut, Shield, User, Settings, Check, CloudLightning, HelpCircle } from 'lucide-react';
+import { Database, RefreshCw, LogOut, Shield, User, Settings, Check, CloudLightning, HelpCircle, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface HeaderProps {
@@ -29,11 +29,28 @@ export default function Header({
   const [config, setConfig] = useState<SyncConfig>({ appsScriptUrl: '' });
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
+  const [isAdminViewingAsStudent, setIsAdminViewingAsStudent] = useState(false);
 
   useEffect(() => {
     const activeConfig = DatabaseService.getSyncConfig();
     setConfig(activeConfig);
   }, [syncTrigger]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsAdminViewingAsStudent(sessionStorage.getItem('ic3_admin_viewing_as_student') === 'true');
+    }
+  }, [syncTrigger]);
+
+  const handleEnterStudentMode = () => {
+    sessionStorage.setItem('ic3_admin_viewing_as_student', 'true');
+    window.location.href = '/';
+  };
+
+  const handleExitStudentMode = () => {
+    sessionStorage.removeItem('ic3_admin_viewing_as_student');
+    window.location.href = '/admin/reports';
+  };
 
   const handleSync = async () => {
     if (!config.appsScriptUrl) {
@@ -78,6 +95,30 @@ export default function Header({
 
         {/* CONTROLS */}
         <div className="flex items-center gap-2 sm:gap-3.5">
+          {/* VIEW AS STUDENT BUTTON (FOR ADMINS) */}
+          {currentUser && userRole === 'Admin' && !isAdminViewingAsStudent && (
+            <button
+              onClick={handleEnterStudentMode}
+              title="Xem với tư cách Học sinh"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition cursor-pointer shadow-sm select-none"
+            >
+              <Eye className="w-3.5 h-3.5 text-slate-500" />
+              <span className="hidden sm:inline text-xs font-bold">Xem tư cách Học sinh</span>
+            </button>
+          )}
+
+          {/* EXIT STUDENT MODE BUTTON */}
+          {isAdminViewingAsStudent && (
+            <button
+              onClick={handleExitStudentMode}
+              title="Quay lại giao diện quản trị"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-black hover:bg-amber-100 transition cursor-pointer shadow-sm select-none"
+            >
+              <Shield className="w-3.5 h-3.5 text-amber-500" />
+              <span>Thoát Chế độ Học sinh</span>
+            </button>
+          )}
+
           {/* DATABASE CONNECTION STATUS */}
           {config.appsScriptUrl && currentUser && userRole === 'Admin' && !hideSyncButton && (
             <button

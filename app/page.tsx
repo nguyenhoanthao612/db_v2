@@ -50,15 +50,30 @@ export default function Home() {
     // Check if user session exists in sessionStorage (fast refresh persistence)
     const storedUser = sessionStorage.getItem('ic3_current_user');
     const storedRole = sessionStorage.getItem('ic3_user_role');
+    const adminViewingAsStudent = sessionStorage.getItem('ic3_admin_viewing_as_student') === 'true';
+
     if (storedUser && storedRole) {
-      setCurrentUser(JSON.parse(storedUser));
-      setUserRole(storedRole as any);
-      if (storedRole === 'Admin') {
-        router.push('/admin/reports');
-      } else if (storedRole === 'Student') {
-        const isSynced = sessionStorage.getItem('ic3_full_synced') === 'true';
-        if (isSynced) {
-          setPreloadFinished(true);
+      if (storedRole === 'Admin' && adminViewingAsStudent) {
+        const adminUser = JSON.parse(storedUser);
+        setCurrentUser({
+          StudentID: 'ADMIN_' + (adminUser.Username || 'admin').trim().toUpperCase(),
+          FullName: adminUser.FullName || adminUser.Username || 'Quản trị viên',
+          ClassGroup: 'Quản trị viên',
+          SchoolName: 'Hệ thống',
+          Username: adminUser.Username,
+        });
+        setUserRole('Student');
+        setPreloadFinished(true);
+      } else {
+        setCurrentUser(JSON.parse(storedUser));
+        setUserRole(storedRole as any);
+        if (storedRole === 'Admin') {
+          router.push('/admin/reports');
+        } else if (storedRole === 'Student') {
+          const isSynced = sessionStorage.getItem('ic3_full_synced') === 'true';
+          if (isSynced) {
+            setPreloadFinished(true);
+          }
         }
       }
     }
@@ -322,6 +337,7 @@ export default function Home() {
     setLoginPreloadFinished(false);
     sessionStorage.removeItem('ic3_current_user');
     sessionStorage.removeItem('ic3_user_role');
+    sessionStorage.removeItem('ic3_admin_viewing_as_student');
   };
 
   const triggerSyncUpdate = () => {
