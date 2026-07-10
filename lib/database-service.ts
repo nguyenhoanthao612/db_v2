@@ -55,13 +55,19 @@ export class DatabaseService {
 
   // Get active Sync Configuration
   public static getSyncConfig(): SyncConfig {
-    const isEnvConfigured = process.env.NEXT_PUBLIC_APPS_SCRIPT_CONFIGURED === 'true';
+    const envUrl = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL;
+    if (envUrl) {
+      const sanitizedEnv = envUrl.replace(/^["']|["']$/g, '').trim();
+      const localConfig = getLocalStorage<SyncConfig>(this.KEY_SYNC_CONFIG, { appsScriptUrl: '' });
+      return {
+        appsScriptUrl: sanitizedEnv,
+        lastSynced: localConfig.lastSynced || new Date().toISOString(),
+      };
+    }
     const localConfig = getLocalStorage<SyncConfig>(this.KEY_SYNC_CONFIG, { appsScriptUrl: '' });
-    
-    const isConfigured = isEnvConfigured || !!localConfig.appsScriptUrl;
     return {
-      appsScriptUrl: isConfigured ? 'configured_on_server' : '',
-      lastSynced: localConfig.lastSynced || new Date().toISOString(),
+      ...localConfig,
+      appsScriptUrl: (localConfig.appsScriptUrl || '').replace(/^["']|["']$/g, '').trim(),
     };
   }
 
@@ -69,7 +75,7 @@ export class DatabaseService {
   public static saveSyncConfig(url: string): void {
     const sanitizedUrl = (url || '').replace(/^["']|["']$/g, '').trim();
     setLocalStorage<SyncConfig>(this.KEY_SYNC_CONFIG, {
-      appsScriptUrl: sanitizedUrl ? 'configured_on_server' : '',
+      appsScriptUrl: sanitizedUrl,
       lastSynced: new Date().toISOString(),
     });
   }
@@ -81,7 +87,7 @@ export class DatabaseService {
       throw new Error('Google Apps Script URL is not configured.');
     }
 
-    let proxyUrl = `/api/proxy?action=${encodeURIComponent(action)}`;
+    let proxyUrl = `/api/proxy?url=${encodeURIComponent(config.appsScriptUrl)}&action=${encodeURIComponent(action)}`;
     for (const [key, val] of Object.entries(params)) {
       proxyUrl += `&${encodeURIComponent(key)}=${encodeURIComponent(val)}`;
     }
@@ -107,15 +113,15 @@ export class DatabaseService {
   // Verify Google Sheets connection
   public static async testConnection(url: string): Promise<{ success: boolean; message?: string }> {
     try {
-      const response = await fetch('/api/proxy/config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url }),
-      });
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}&action=getExams`;
+      const response = await fetch(proxyUrl, { method: 'GET' });
       if (response.ok) {
-        return await response.json();
+        const data = await response.json();
+        if (data.success === true) {
+          return { success: true };
+        } else {
+          return { success: false, message: data.message || 'Yêu cầu không thành công từ Apps Script.' };
+        }
       }
       return { success: false, message: `Lỗi máy chủ proxy: HTTP ${response.status}` };
     } catch (e: any) {

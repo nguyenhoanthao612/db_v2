@@ -125,23 +125,16 @@ export default function AppsScriptGuide({ onUrlSaved }: AppsScriptGuideProps) {
       </div>
 
       <form onSubmit={handleSave} className="bg-white border border-blue-100 rounded-xl p-5 shadow-sm">
-        <div className="block text-xs font-semibold text-gray-700 mb-2 flex items-center justify-between">
-          <label className="flex items-center gap-1.5">
-            <CloudLightning className="w-4 h-4 text-amber-500" />
-            Nhập URL Google Apps Script Web App của bạn để kích hoạt Sync 2 chiều:
-          </label>
-          {!!DatabaseService.getSyncConfig().appsScriptUrl && (
-            <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 font-extrabold flex items-center gap-0.5">
-              ● Đã kết nối bảo mật (F12-Safe)
-            </span>
-          )}
-        </div>
+        <label className="block text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+          <CloudLightning className="w-4 h-4 text-amber-500" />
+          Nhập URL Google Apps Script Web App của bạn để kích hoạt Sync 2 chiều:
+        </label>
         <div className="flex flex-col sm:flex-row gap-2">
           <input
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder={!!DatabaseService.getSyncConfig().appsScriptUrl ? "Nhập URL mới để cập nhật..." : "https://script.google.com/macros/s/.../exec"}
+            placeholder="https://script.google.com/macros/s/.../exec"
             className="flex-1 px-3.5 py-2.5 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
           />
           <button
