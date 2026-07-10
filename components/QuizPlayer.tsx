@@ -430,6 +430,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   }, [exam, level, mode, syncTrigger]);
 
   const [shuffledImageIndices, setShuffledImageIndices] = useState<number[]>([]);
+  const [shuffledTextIndices, setShuffledTextIndices] = useState<number[]>([]);
   const [selectedMatchImgIdx, setSelectedMatchImgIdx] = useState<number | null>(null);
   const [shuffledRightOptions, setShuffledRightOptions] = useState<string[]>([]);
   const [selectedMatchingRightOpt, setSelectedMatchingRightOpt] = useState<string | null>(null);
@@ -444,9 +445,14 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
           if (parsed.imageOptions) {
             const indices = parsed.imageOptions.map((_, i) => i);
             const shuffled = [...indices].sort(() => Math.random() - 0.5);
+            
+            const textIndices = (parsed.textTargets || []).map((_, i) => i);
+            const shuffledTexts = [...textIndices].sort(() => Math.random() - 0.5);
+
             setTimeout(() => {
               setSelectedMatchImgIdx(null);
               setShuffledImageIndices(shuffled);
+              setShuffledTextIndices(shuffledTexts);
               setSelectedMatchingRightOpt(null);
               setShuffledRightOptions([]);
             }, 0);
@@ -462,6 +468,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
             setTimeout(() => {
               setSelectedMatchImgIdx(null);
               setShuffledImageIndices([]);
+              setShuffledTextIndices([]);
               setSelectedMatchingRightOpt(null);
               setShuffledRightOptions(shuffled);
             }, 0);
@@ -473,6 +480,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
         setTimeout(() => {
           setSelectedMatchImgIdx(null);
           setShuffledImageIndices([]);
+          setShuffledTextIndices([]);
           setSelectedMatchingRightOpt(null);
           setShuffledRightOptions([]);
         }, 0);
@@ -481,6 +489,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
       setTimeout(() => {
         setSelectedMatchImgIdx(null);
         setShuffledImageIndices([]);
+        setShuffledTextIndices([]);
         setSelectedMatchingRightOpt(null);
         setShuffledRightOptions([]);
       }, 0);
@@ -2109,6 +2118,10 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                     console.error(e);
                   }
 
+                  const displayTextIndices = (shuffledTextIndices && shuffledTextIndices.length > 0)
+                    ? shuffledTextIndices
+                    : parsedAnswers.textTargets.map((_, i) => i);
+
                   return (
                     <div className="space-y-4">
                       <div className="bg-indigo-50 border border-indigo-100 text-indigo-700 p-3.5 rounded-2xl text-xs font-bold leading-relaxed shadow-sm">
@@ -2124,24 +2137,25 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                         <div className="md:col-span-7 space-y-3">
                           <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Cột Trái: Mô tả văn bản</h4>
                           
-                          {parsedAnswers.textTargets.map((tgt, tIdx) => {
-                            // Find if any image is matched with this text index (tIdx)
-                            const matchedImgIdx = currentAnswer.findIndex((val: any) => val === tIdx);
+                          {displayTextIndices.map((realTIdx, shuffledIdx) => {
+                            const tgt = parsedAnswers.textTargets?.[realTIdx] || '';
+                            // Find if any image is matched with this text index (realTIdx)
+                            const matchedImgIdx = currentAnswer.findIndex((val: any) => val === realTIdx);
                             const hasMatch = matchedImgIdx !== -1;
-                            const isMatchCorrect = hasMatch && correctOrder[matchedImgIdx] === tIdx;
+                            const isMatchCorrect = hasMatch && correctOrder[matchedImgIdx] === realTIdx;
 
                             // Also find what the correct image index is for this slot
-                            const correctImgIdxForSlot = correctOrder.indexOf(tIdx);
+                            const correctImgIdxForSlot = correctOrder.indexOf(realTIdx);
 
                             return (
                               <div 
-                                key={tIdx} 
+                                key={realTIdx} 
                                 className="flex items-center gap-3 bg-white border border-slate-200/80 rounded-2xl p-3 min-h-[90px] shadow-sm hover:shadow transition"
                               >
                                 {/* Text description card */}
                                 <div className="flex-1 flex gap-2 items-start">
                                   <span className="flex items-center justify-center w-5 h-5 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black mt-0.5 flex-shrink-0">
-                                    {tIdx + 1}
+                                    {shuffledIdx + 1}
                                   </span>
                                   <p className="text-xs font-bold text-slate-700 leading-relaxed">
                                     {tgt}
@@ -2187,11 +2201,11 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                         const arr = [...currentAnswer];
                                         // Clear other assignments to this text slot (1-to-1)
                                         arr.forEach((val, i) => {
-                                          if (val === tIdx) {
+                                          if (val === realTIdx) {
                                             arr[i] = null;
                                           }
                                         });
-                                        arr[imgIdx] = tIdx;
+                                        arr[imgIdx] = realTIdx;
                                         handleSelectAnswer(currentQ.QuestionID, arr);
                                         setSelectedMatchImgIdx(null);
                                       }
@@ -2201,11 +2215,11 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                                       if (selectedMatchImgIdx !== null) {
                                         const arr = [...currentAnswer];
                                         arr.forEach((val, i) => {
-                                          if (val === tIdx) {
+                                          if (val === realTIdx) {
                                             arr[i] = null;
                                           }
                                         });
-                                        arr[selectedMatchImgIdx] = tIdx;
+                                        arr[selectedMatchImgIdx] = realTIdx;
                                         handleSelectAnswer(currentQ.QuestionID, arr);
                                         setSelectedMatchImgIdx(null);
                                       }
