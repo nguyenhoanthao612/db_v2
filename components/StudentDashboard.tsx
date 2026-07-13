@@ -134,6 +134,7 @@ export default function StudentDashboard({
   const avgScore = totalExamsTaken > 0 ? Math.round(scores.reduce((acc, s) => acc + s.Score, 0) / totalExamsTaken) : 0;
   const totalCorrect = scores.reduce((acc, s) => acc + s.Correct, 0);
   const totalWrong = scores.reduce((acc, s) => acc + s.Wrong, 0);
+  const avgScorePercent = (totalCorrect + totalWrong) > 0 ? Math.round((totalCorrect / (totalCorrect + totalWrong)) * 100) : 0;
   const totalTimeSpent = scores.reduce((acc, s) => acc + s.Time, 0); // seconds
 
   const formatTime = (totalSeconds: number) => {
@@ -218,9 +219,9 @@ export default function StudentDashboard({
           </div>
           <div>
             <p className="text-[11px] font-bold text-slate-400 uppercase">Điểm Trung Bình</p>
-            <p className="text-xl font-extrabold text-slate-800">{avgScore}%</p>
+            <p className="text-xl font-extrabold text-slate-800">{avgScore} điểm</p>
             <div className="w-24 bg-slate-100 h-1.5 rounded-full mt-1.5 overflow-hidden">
-              <div className="bg-amber-400 h-full rounded-full" style={{ width: `${avgScore}%` }} />
+              <div className="bg-amber-400 h-full rounded-full" style={{ width: `${avgScorePercent}%` }} />
             </div>
           </div>
         </div>
@@ -388,10 +389,16 @@ export default function StudentDashboard({
                       <div className="text-right">
                         <span
                           className={`text-xs font-black px-2 py-0.5 rounded-md ${
-                            score.Score >= 80 ? 'bg-green-50 text-green-700 border border-green-100' : score.Score >= 50 ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-red-50 text-red-700 border border-red-100'
+                            (score.Correct + score.Wrong) > 0
+                              ? (score.Correct / (score.Correct + score.Wrong) >= 0.8)
+                                ? 'bg-green-50 text-green-700 border border-green-100'
+                                : (score.Correct / (score.Correct + score.Wrong) >= 0.5)
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                                  : 'bg-red-50 text-red-700 border border-red-100'
+                              : 'bg-slate-50 text-slate-700 border border-slate-100'
                           }`}
                         >
-                          {score.Score}%
+                          {score.Score} điểm
                         </span>
                       </div>
                     </div>
@@ -488,7 +495,7 @@ export default function StudentDashboard({
                             </span>
                             {isCompleted && (
                               <span className="inline-flex items-center gap-1 bg-green-50 border border-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                                <CheckCircle2 className="w-3 h-3 text-green-500" /> Điểm cao nhất: {bestScore}%
+                                <CheckCircle2 className="w-3 h-3 text-green-500" /> Điểm cao nhất: {bestScore} điểm
                               </span>
                             )}
                           </div>
@@ -694,10 +701,16 @@ export default function StudentDashboard({
                         <div className="text-right">
                           <span
                             className={`text-sm font-black px-2.5 py-1 rounded-lg ${
-                              score.Score >= 80 ? 'bg-green-100 text-green-700' : score.Score >= 50 ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
+                              (score.Correct + score.Wrong) > 0
+                                ? (score.Correct / (score.Correct + score.Wrong) >= 0.8)
+                                  ? 'bg-green-100 text-green-700'
+                                  : (score.Correct / (score.Correct + score.Wrong) >= 0.5)
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-red-100 text-red-700'
+                                : 'bg-slate-100 text-slate-700'
                             }`}
                           >
-                            {score.Score}%
+                            {score.Score} điểm
                           </span>
                           <div className="flex gap-1.5 justify-end mt-1.5 text-[10px] font-bold text-slate-400">
                             <span className="text-green-600">+{score.Correct}</span>

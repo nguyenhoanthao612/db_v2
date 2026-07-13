@@ -863,7 +863,30 @@ export class DatabaseService {
 
     if (config.appsScriptUrl) {
       try {
-        await this.callAppsScript('submitScore', {}, { scoreRecord });
+        const payloadRecord = {
+          // PascalCase fields
+          StudentID: scoreRecord.StudentID,
+          StudentName: scoreRecord.StudentName || 'Học sinh ẩn danh',
+          ExamID: scoreRecord.ExamID,
+          Level: scoreRecord.Level,
+          Score: scoreRecord.Score,
+          Correct: scoreRecord.Correct,
+          Wrong: scoreRecord.Wrong,
+          Time: scoreRecord.Time,
+          SubmitTime: scoreRecord.SubmitTime || new Date().toISOString(),
+
+          // camelCase fields (as requested by requirement 2)
+          studentId: scoreRecord.StudentID,
+          studentName: scoreRecord.StudentName || 'Học sinh ẩn danh',
+          examId: scoreRecord.ExamID,
+          level: scoreRecord.Level,
+          score: scoreRecord.Score,
+          correct: scoreRecord.Correct,
+          wrong: scoreRecord.Wrong,
+          time: scoreRecord.Time,
+          submitTime: scoreRecord.SubmitTime || new Date().toISOString()
+        };
+        await this.callAppsScript('submitScore', {}, { scoreRecord: payloadRecord });
       } catch (e) {
         console.error('Failed to submit score to Google Sheets', e);
       }

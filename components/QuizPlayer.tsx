@@ -714,7 +714,6 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
       }
     });
 
-    const scorePct = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
     const elapsedSeconds = mode === 'testing'
       ? Math.max(0, ((exam.Duration || 40) * 60) - timer)
       : timer;
@@ -724,7 +723,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
       StudentName: student.FullName,
       ExamID: exam.ExamID,
       Level: level,
-      Score: scorePct,
+      Score: correctCount, // Score is calculated as number of correct answers (1 point per correct answer)
       Correct: correctCount,
       Wrong: wrongCount,
       Time: elapsedSeconds,
@@ -757,13 +756,12 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
     if (mode === 'race' && !isCorrect) {
       // Save current progress to history before resetting
-      const scorePct = questions.length > 0 ? Math.round((currentIdx / questions.length) * 100) : 0;
       const record: ScoreRecord = {
         StudentID: student.StudentID,
         StudentName: student.FullName,
         ExamID: exam.ExamID,
         Level: level,
-        Score: scorePct,
+        Score: currentIdx, // Score is calculated as number of correct answers (1 point per correct answer)
         Correct: currentIdx, // everything before this was correct
         Wrong: questions.length - currentIdx,
         Time: timer,
@@ -2814,7 +2812,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
               {/* Score visual */}
               <div className="inline-block bg-white/10 backdrop-blur border border-white/20 px-8 py-4 rounded-2xl">
                 <p className="text-[11px] font-black uppercase tracking-wider text-blue-100">Điểm số đạt được</p>
-                <p className="text-5xl font-black mt-1">{scoreRecord?.Score}%</p>
+                <p className="text-5xl font-black mt-1">{scoreRecord?.Score} điểm</p>
               </div>
 
               {/* Stats detail row */}

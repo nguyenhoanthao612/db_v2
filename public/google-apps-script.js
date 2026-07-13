@@ -482,16 +482,83 @@ function doPost(e) {
       }
       
       var scoreRec = postData.scoreRecord;
+      if (!scoreRec) {
+        return createResponse({ success: false, message: "Lưu kết quả thất bại: Thiếu thông tin scoreRecord." });
+      }
+
+      // Hỗ trợ linh hoạt cả PascalCase và camelCase
+      var studentId = getProp(scoreRec, "StudentID") || getProp(scoreRec, "studentId");
+      var studentName = getProp(scoreRec, "StudentName") || getProp(scoreRec, "studentName");
+      var examId = getProp(scoreRec, "ExamID") || getProp(scoreRec, "examId");
+      var level = getProp(scoreRec, "Level") || getProp(scoreRec, "level");
+      
+      var scoreVal = getProp(scoreRec, "Score");
+      if (scoreVal === undefined || scoreVal === null || scoreVal === "") {
+        scoreVal = getProp(scoreRec, "score");
+      }
+      var correctVal = getProp(scoreRec, "Correct");
+      if (correctVal === undefined || correctVal === null || correctVal === "") {
+        correctVal = getProp(scoreRec, "correct");
+      }
+      var wrongVal = getProp(scoreRec, "Wrong");
+      if (wrongVal === undefined || wrongVal === null || wrongVal === "") {
+        wrongVal = getProp(scoreRec, "wrong");
+      }
+      var timeVal = getProp(scoreRec, "Time");
+      if (timeVal === undefined || timeVal === null || timeVal === "") {
+        timeVal = getProp(scoreRec, "time");
+      }
+      var submitTimeVal = getProp(scoreRec, "SubmitTime") || getProp(scoreRec, "submitTime") || new Date().toISOString();
+
+      // Kiểm tra đầy đủ các trường bắt buộc (Không ghi dữ liệu và trả về thông báo lỗi nếu thiếu trường nào)
+      var missingFields = [];
+      if (studentId === undefined || studentId === null || studentId === "") missingFields.push("studentId/StudentID");
+      if (studentName === undefined || studentName === null || studentName === "") missingFields.push("studentName/StudentName");
+      if (examId === undefined || examId === null || examId === "") missingFields.push("examId/ExamID");
+      if (level === undefined || level === null || level === "") missingFields.push("level/Level");
+      if (scoreVal === undefined || scoreVal === null || scoreVal === "") missingFields.push("score/Score");
+      if (correctVal === undefined || correctVal === null || correctVal === "") missingFields.push("correct/Correct");
+      if (wrongVal === undefined || wrongVal === null || wrongVal === "") missingFields.push("wrong/Wrong");
+      if (timeVal === undefined || timeVal === null || timeVal === "") missingFields.push("time/Time");
+      if (submitTimeVal === undefined || submitTimeVal === null || submitTimeVal === "") missingFields.push("submitTime/SubmitTime");
+
+      if (missingFields.length > 0) {
+        return createResponse({ 
+          success: false, 
+          message: "Lưu kết quả thất bại do thiếu các trường bắt buộc: " + missingFields.join(", ") 
+        });
+      }
+
+      var mappedObj = {
+        StudentID: studentId,
+        StudentName: studentName,
+        ExamID: examId,
+        Level: level,
+        Score: Number(scoreVal),
+        Correct: Number(correctVal),
+        Wrong: Number(wrongVal),
+        Time: Number(timeVal),
+        SubmitTime: submitTimeVal
+      };
+
+      // 4. Mảng ghi xuống sheet (đúng thứ tự 9 cột chuẩn)
       var row = [
-        scoreRec.StudentID,
-        scoreRec.ExamID,
-        scoreRec.Level,
-        scoreRec.Score,
-        scoreRec.Correct,
-        scoreRec.Wrong,
-        scoreRec.Time,
-        scoreRec.SubmitTime || new Date().toISOString()
+        mappedObj.StudentID,
+        mappedObj.StudentName,
+        mappedObj.ExamID,
+        mappedObj.Level,
+        mappedObj.Score,
+        mappedObj.Correct,
+        mappedObj.Wrong,
+        mappedObj.Time,
+        mappedObj.SubmitTime
       ];
+
+      // 6. Thêm log debug chi tiết
+      console.log("SubmitScore Payload nhận được: " + JSON.stringify(postData));
+      console.log("SubmitScore Object sau mapping: " + JSON.stringify(mappedObj));
+      console.log("SubmitScore Mảng ghi xuống sheet: " + JSON.stringify(row));
+
       scoreSheet.appendRow(row);
       return createResponse({ success: true, message: "Đã lưu lịch sử làm bài lên Google Sheets!" });
     }

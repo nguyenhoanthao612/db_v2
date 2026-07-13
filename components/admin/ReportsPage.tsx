@@ -128,7 +128,7 @@ export default function ReportsPage() {
           <div className="bg-white border border-blue-50 p-5 rounded-2xl shadow-sm text-center">
             <CheckCircle className="w-6 h-6 text-emerald-500 mx-auto mb-2" />
             <p className="text-[10px] text-slate-400 font-bold uppercase">Điểm TB</p>
-            <p className="text-2xl font-black text-slate-800 mt-1">{stats.avgScore}%</p>
+            <p className="text-2xl font-black text-slate-800 mt-1">{stats.avgScore} đ</p>
           </div>
 
           <div className="bg-white border border-blue-50 p-5 rounded-2xl shadow-sm text-center col-span-2 md:col-span-1">
