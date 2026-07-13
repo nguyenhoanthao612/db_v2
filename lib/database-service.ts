@@ -846,13 +846,15 @@ export class DatabaseService {
       }
     }
 
-    // Add student names if missing
+    // Add student names and schools if missing
     const students = getLocalStorage<Student[]>(this.KEY_STUDENTS, initialStudents);
     return scores.map(s => {
       const found = students.find(st => st.StudentID === s.StudentID);
       return {
         ...s,
         StudentName: found ? found.FullName : s.StudentName || 'Học sinh ẩn danh',
+        SchoolName: found ? found.SchoolName : s.SchoolName || 'Trường chưa xác định',
+        ClassGroup: found ? found.ClassGroup : s.ClassGroup || 'Lớp chưa xác định',
       };
     });
   }
@@ -867,6 +869,8 @@ export class DatabaseService {
           // PascalCase fields
           StudentID: scoreRecord.StudentID,
           StudentName: scoreRecord.StudentName || 'Học sinh ẩn danh',
+          SchoolName: scoreRecord.SchoolName || 'Trường chưa xác định',
+          ClassGroup: scoreRecord.ClassGroup || 'Lớp chưa xác định',
           ExamID: scoreRecord.ExamID,
           Level: scoreRecord.Level,
           Score: scoreRecord.Score,
@@ -878,6 +882,8 @@ export class DatabaseService {
           // camelCase fields (as requested by requirement 2)
           studentId: scoreRecord.StudentID,
           studentName: scoreRecord.StudentName || 'Học sinh ẩn danh',
+          schoolName: scoreRecord.SchoolName || 'Trường chưa xác định',
+          classGroup: scoreRecord.ClassGroup || 'Lớp chưa xác định',
           examId: scoreRecord.ExamID,
           level: scoreRecord.Level,
           score: scoreRecord.Score,

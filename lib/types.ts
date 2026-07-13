@@ -62,6 +62,8 @@ export interface Admin {
 export interface ScoreRecord {
   StudentID: string;
   StudentName?: string;
+  SchoolName?: string;
+  ClassGroup?: string;
   ExamID: string;
   Level: 'LV1' | 'LV2' | 'LV3';
   Score: number;

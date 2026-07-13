@@ -721,6 +721,8 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     const record: ScoreRecord = {
       StudentID: student.StudentID,
       StudentName: student.FullName,
+      SchoolName: student.SchoolName || 'Trường chưa xác định',
+      ClassGroup: student.ClassGroup || 'Lớp chưa xác định',
       ExamID: exam.ExamID,
       Level: level,
       Score: correctCount, // Score is calculated as number of correct answers (1 point per correct answer)
@@ -759,6 +761,8 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
       const record: ScoreRecord = {
         StudentID: student.StudentID,
         StudentName: student.FullName,
+        SchoolName: student.SchoolName || 'Trường chưa xác định',
+        ClassGroup: student.ClassGroup || 'Lớp chưa xác định',
         ExamID: exam.ExamID,
         Level: level,
         Score: currentIdx, // Score is calculated as number of correct answers (1 point per correct answer)

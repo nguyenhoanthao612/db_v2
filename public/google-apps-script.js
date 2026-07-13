@@ -8,7 +8,7 @@
  *   - "Admin" (Cột: AdminID, Username, Password, Role)
  *   - "Student" (Cột: StudentID, SchoolName, Username, Password, FullName, ClassGroup, CreatedAt)
  *   - "Questions" (Cột: QuestionID, ExamID, Level, QuestionType, QuestionContent, Answers, CorrectAnswer, Explanation, Image, Video, Audio, Score, CreatedAt)
- *   - "Score" (Cột: StudentID, ExamID, Level, Score, Correct, Wrong, Time, SubmitTime)
+ *   - "Score" (Cột: StudentID, StudentName, SchoolName, ClassGroup, ExamID, Level, Score, Correct, Wrong, Time, SubmitTime)
  * Bước 3: Vào Tiện ích mở rộng (Extensions) -> Apps Script.
  * Bước 4: Xóa toàn bộ mã mặc định và dán toàn bộ đoạn code dưới đây vào.
  * Bước 5: Nhấn Lưu (Save) rồi nhấn "Triển khai" (Deploy) -> "Triển khai mới" (New deployment).
@@ -489,6 +489,8 @@ function doPost(e) {
       // Hỗ trợ linh hoạt cả PascalCase và camelCase
       var studentId = getProp(scoreRec, "StudentID") || getProp(scoreRec, "studentId");
       var studentName = getProp(scoreRec, "StudentName") || getProp(scoreRec, "studentName");
+      var schoolName = getProp(scoreRec, "SchoolName") || getProp(scoreRec, "schoolName");
+      var classGroup = getProp(scoreRec, "ClassGroup") || getProp(scoreRec, "classGroup");
       var examId = getProp(scoreRec, "ExamID") || getProp(scoreRec, "examId");
       var level = getProp(scoreRec, "Level") || getProp(scoreRec, "level");
       
@@ -514,6 +516,8 @@ function doPost(e) {
       var missingFields = [];
       if (studentId === undefined || studentId === null || studentId === "") missingFields.push("studentId/StudentID");
       if (studentName === undefined || studentName === null || studentName === "") missingFields.push("studentName/StudentName");
+      if (schoolName === undefined || schoolName === null || schoolName === "") missingFields.push("schoolName/SchoolName");
+      if (classGroup === undefined || classGroup === null || classGroup === "") missingFields.push("classGroup/ClassGroup");
       if (examId === undefined || examId === null || examId === "") missingFields.push("examId/ExamID");
       if (level === undefined || level === null || level === "") missingFields.push("level/Level");
       if (scoreVal === undefined || scoreVal === null || scoreVal === "") missingFields.push("score/Score");
@@ -532,6 +536,8 @@ function doPost(e) {
       var mappedObj = {
         StudentID: studentId,
         StudentName: studentName,
+        SchoolName: schoolName,
+        ClassGroup: classGroup,
         ExamID: examId,
         Level: level,
         Score: Number(scoreVal),
@@ -541,10 +547,12 @@ function doPost(e) {
         SubmitTime: submitTimeVal
       };
 
-      // 4. Mảng ghi xuống sheet (đúng thứ tự 9 cột chuẩn)
+      // 4. Mảng ghi xuống sheet (đúng thứ tự 11 cột chuẩn)
       var row = [
         mappedObj.StudentID,
         mappedObj.StudentName,
+        mappedObj.SchoolName,
+        mappedObj.ClassGroup,
         mappedObj.ExamID,
         mappedObj.Level,
         mappedObj.Score,
