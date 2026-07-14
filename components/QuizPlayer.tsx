@@ -89,6 +89,44 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   const [feedbackIsCorrect, setFeedbackIsCorrect] = useState(false);
   const [submittedQuestions, setSubmittedQuestions] = useState<Record<string, { isCorrect: boolean }>>({});
   const [isReviewMode, setIsReviewMode] = useState(false);
+  const [cheatWarning, setCheatWarning] = useState<string | null>(null);
+
+  // Focus/tab switch cheat detection
+  useEffect(() => {
+    if (loading || quizFinished || isReviewMode) return;
+
+    let timeoutId: NodeJS.Timeout;
+
+    const handleCheatDetected = (reason: string) => {
+      // Return to the first question (index 0)
+      setCurrentIdx(0);
+      setCheatWarning(reason);
+
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        setCheatWarning(null);
+      }, 7000); // Display warning for 7 seconds
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        handleCheatDetected("Hệ thống phát hiện hành vi chuyển tab hoặc rời màn hình làm bài! Bạn đã bị đưa về câu hỏi đầu tiên.");
+      }
+    };
+
+    const handleWindowBlur = () => {
+      handleCheatDetected("Hệ thống phát hiện hành vi rời màn hình làm bài (mất tiêu điểm)! Bạn đã bị đưa về câu hỏi đầu tiên.");
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [loading, quizFinished, isReviewMode]);
 
   // Drag and drop state for sequence ordering
   const [seqDragIndex, setSeqDragIndex] = useState<number | null>(null);
@@ -899,6 +937,28 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
   return (
     <div className="relative min-h-[calc(100vh-8rem)]">
+      {/* CHEATING DETECTED WARNING BANNER */}
+      <AnimatePresence>
+        {cheatWarning && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-lg bg-rose-500 text-white rounded-2xl shadow-2xl border border-rose-400 p-4 flex items-start gap-3.5"
+          >
+            <div className="bg-white/20 p-2 rounded-xl mt-0.5 shrink-0">
+              <AlertCircle className="w-5 h-5 text-white stroke-[2.5]" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-black tracking-wide uppercase">Phát Hiện Nghi Vấn Gian Lận!</h4>
+              <p className="text-xs font-semibold leading-relaxed text-rose-50">
+                {cheatWarning}
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Blurry main quiz interface - smoothly un-blurs and transitions as loading completes */}
       <div id="quiz-player" className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-all duration-1000 ease-out ${
         loading
