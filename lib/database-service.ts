@@ -33,6 +33,42 @@ export class DatabaseService {
   private static KEY_EXAMS = 'ic3_exams';
   private static KEY_SYNC_CONFIG = 'ic3_sync_config';
 
+  // Helper to parse dynamic-column score row-objects into individual ScoreRecord[]
+  public static parseRawScoresToRecords(rawScores: any[]): ScoreRecord[] {
+    const records: ScoreRecord[] = [];
+    const baseKeys = ['studentid', 'studentname', 'schoolname', 'classgroup', 'level'];
+
+    for (const row of rawScores) {
+      const studentId = row.StudentID || row.studentId || '';
+      const level = row.Level || row.level || '';
+      if (!studentId || !level) continue;
+
+      const studentName = row.StudentName || row.studentName || 'Học sinh ẩn danh';
+      const schoolName = row.SchoolName || row.schoolName || 'Trường chưa xác định';
+      const classGroup = row.ClassGroup || row.classGroup || 'Lớp chưa xác định';
+
+      for (const [key, value] of Object.entries(row)) {
+        const lowerKey = key.toLowerCase();
+        if (!baseKeys.includes(lowerKey) && value !== null && value !== undefined && value !== '') {
+          records.push({
+            StudentID: studentId,
+            StudentName: studentName,
+            SchoolName: schoolName,
+            ClassGroup: classGroup,
+            ExamID: key,
+            Level: level as 'LV1' | 'LV2' | 'LV3',
+            Score: Number(value),
+            Correct: 0,
+            Wrong: 0,
+            Time: 0,
+            SubmitTime: new Date().toISOString()
+          });
+        }
+      }
+    }
+    return records;
+  }
+
   // Static initialization of Local Storage if empty
   public static initLocalStorage(force = false) {
     if (!isClient) return;
@@ -196,13 +232,7 @@ export class DatabaseService {
       }
 
       if (scoresRes && scoresRes.success && scoresRes.data) {
-        const formattedScores = scoresRes.data.map((s: any) => ({
-          ...s,
-          Score: Number(s.Score),
-          Correct: Number(s.Correct),
-          Wrong: Number(s.Wrong),
-          Time: Number(s.Time),
-        }));
+        const formattedScores = this.parseRawScoresToRecords(scoresRes.data);
         setLocalStorage(this.KEY_SCORES, formattedScores);
       }
 
@@ -319,13 +349,7 @@ export class DatabaseService {
       }
 
       if (scoresRes && scoresRes.success && scoresRes.data) {
-        const formattedScores = scoresRes.data.map((s: any) => ({
-          ...s,
-          Score: Number(s.Score),
-          Correct: Number(s.Correct),
-          Wrong: Number(s.Wrong),
-          Time: Number(s.Time),
-        }));
+        const formattedScores = this.parseRawScoresToRecords(scoresRes.data);
         setLocalStorage(this.KEY_SCORES, formattedScores);
       }
 
@@ -898,9 +922,18 @@ export class DatabaseService {
       }
     }
 
-    // Save locally
+    // Save locally (Overwrites score for same StudentID + Level + ExamID)
     const scores = getLocalStorage<ScoreRecord[]>(this.KEY_SCORES, initialScores);
-    scores.unshift(scoreRecord); // Add to beginning of records
+    const idx = scores.findIndex(
+      s => s.StudentID === scoreRecord.StudentID && 
+           s.Level === scoreRecord.Level && 
+           s.ExamID === scoreRecord.ExamID
+    );
+    if (idx !== -1) {
+      scores[idx] = { ...scoreRecord };
+    } else {
+      scores.unshift(scoreRecord);
+    }
     setLocalStorage(this.KEY_SCORES, scores);
     return true;
   }
