@@ -336,10 +336,10 @@ export default function StudentDashboard({
             })}
           </div>
 
-          {/* Lower layout: Pathways + Recent activity */}
+          {/* Lower layout: Pathways */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-4">
             {/* Study Pathways */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-3 space-y-6">
               <div>
                 <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
                   <Award className="w-5 h-5 text-indigo-500" /> Hướng Dẫn Ôn Tập Hiệu Quả
@@ -383,59 +383,6 @@ export default function StudentDashboard({
                     </p>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            {/* Overall Recent scores list */}
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-indigo-500" /> Nhật Ký Làm Bài
-                </h3>
-                <p className="text-xs text-slate-400 font-bold mt-1">Kết quả luyện tập gần đây nhất</p>
-              </div>
-
-              <div className="space-y-3 max-h-[310px] overflow-y-auto pr-1 custom-scrollbar">
-                {scores.length === 0 ? (
-                  <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center text-slate-400">
-                    <Trophy className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                    <p className="text-xs font-black">Chưa có dữ liệu bài làm</p>
-                    <p className="text-[10px] text-slate-400 mt-1">Hãy truy cập một cấp độ bên trên để làm bài ôn tập đầu tiên nhé!</p>
-                  </div>
-                ) : (
-                  scores.slice(0, 5).map((score, index) => (
-                    <div
-                      key={index}
-                      className="bg-white hover:bg-slate-50/50 border border-slate-100 rounded-xl p-3.5 transition duration-200 flex items-center justify-between gap-3 shadow-sm"
-                    >
-                      <div className="space-y-1">
-                        <p className="text-xs font-extrabold text-slate-700 flex items-center gap-1">
-                          Đề {score.ExamID} ({score.Level})
-                        </p>
-                        <p className="text-[9px] text-slate-400 flex items-center gap-1 font-semibold">
-                          <Calendar className="w-2.5 h-2.5" />
-                          {new Date(score.SubmitTime).toLocaleDateString('vi-VN')}
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        <span
-                          className={`text-xs font-black px-2 py-0.5 rounded-md ${
-                            (score.Correct + score.Wrong) > 0
-                              ? (score.Correct / (score.Correct + score.Wrong) >= 0.8)
-                                ? 'bg-green-50 text-green-700 border border-green-100'
-                                : (score.Correct / (score.Correct + score.Wrong) >= 0.5)
-                                  ? 'bg-blue-50 text-blue-700 border border-blue-100'
-                                  : 'bg-red-50 text-red-700 border border-red-100'
-                              : 'bg-slate-50 text-slate-700 border border-slate-100'
-                          }`}
-                        >
-                          {score.Score} điểm
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                )}
               </div>
             </div>
           </div>
