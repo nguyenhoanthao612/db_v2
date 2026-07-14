@@ -93,14 +93,54 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
   // Focus/tab switch cheat detection
   useEffect(() => {
-    if (loading || quizFinished || isReviewMode) return;
+    if (loading || quizFinished || isReviewMode || questions.length === 0) return;
 
     let timeoutId: NodeJS.Timeout;
 
     const handleCheatDetected = (reason: string) => {
-      // Return to the first question (index 0)
+      // 1. Return to the first question (index 0)
       setCurrentIdx(0);
+
+      // 2. Set the cheat warning message
       setCheatWarning(reason);
+
+      // 3. Reset all student answers to their starting state
+      const freshAnswers: Record<string, any> = {};
+      questions.forEach((q) => {
+        try {
+          const parsedAnswers: QuestionAnswers = JSON.parse(q.Answers);
+          if (q.QuestionType === 'Multiple Choice' || q.QuestionType === 'True / False' || q.QuestionType === 'Video Based') {
+            freshAnswers[q.QuestionID] = null;
+          } else if (q.QuestionType === 'Multiple Response') {
+            freshAnswers[q.QuestionID] = [];
+          } else if (q.QuestionType === 'Matching') {
+            freshAnswers[q.QuestionID] = {}; // leftItem -> rightItem
+          } else if (q.QuestionType === 'Sequence Ordering') {
+            const items = parsedAnswers.sequenceItems ? [...parsedAnswers.sequenceItems] : [];
+            // Pre-shuffle sequence items so they start with a randomized layout
+            freshAnswers[q.QuestionID] = [...items].sort(() => Math.random() - 0.5);
+          } else if (q.QuestionType === 'True/False Multiple') {
+            freshAnswers[q.QuestionID] = {}; // statement -> true/false
+          } else if (q.QuestionType === 'Categorization') {
+            freshAnswers[q.QuestionID] = {}; // item -> category
+          } else if (q.QuestionType === 'Hotspot') {
+            freshAnswers[q.QuestionID] = []; // selected hotspots dots array
+          } else if (q.QuestionType?.toLowerCase() === 'match image to text') {
+            freshAnswers[q.QuestionID] = Array(parsedAnswers.imageOptions?.length || 0).fill(null); // idx -> text index
+          } else if (q.QuestionType === 'Matrix Selection') {
+            freshAnswers[q.QuestionID] = {}; // row -> column
+          }
+        } catch (e) {
+          console.error("Error generating reset answers", e);
+        }
+      });
+      setAnswersState(freshAnswers);
+
+      // 4. Reset other test progress states as well
+      setSubmittedQuestions({});
+      setTimer(0);
+      setFlaggedQuestions({});
+      setSeqInteracted({});
 
       if (timeoutId) clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
@@ -110,12 +150,12 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        handleCheatDetected("Hệ thống phát hiện hành vi chuyển tab hoặc rời màn hình làm bài! Bạn đã bị đưa về câu hỏi đầu tiên.");
+        handleCheatDetected("Phát hiện hành vi chuyển tab/rời màn hình! Toàn bộ bài làm đã bị reset và đưa về câu hỏi đầu tiên.");
       }
     };
 
     const handleWindowBlur = () => {
-      handleCheatDetected("Hệ thống phát hiện hành vi rời màn hình làm bài (mất tiêu điểm)! Bạn đã bị đưa về câu hỏi đầu tiên.");
+      handleCheatDetected("Phát hiện hành vi mất tiêu điểm màn hình! Toàn bộ bài làm đã bị reset và đưa về câu hỏi đầu tiên.");
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -126,7 +166,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
       window.removeEventListener('blur', handleWindowBlur);
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [loading, quizFinished, isReviewMode]);
+  }, [loading, quizFinished, isReviewMode, questions]);
 
   // Drag and drop state for sequence ordering
   const [seqDragIndex, setSeqDragIndex] = useState<number | null>(null);
