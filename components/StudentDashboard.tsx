@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseService } from '@/lib/database-service';
 import { Exam, ScoreRecord } from '@/lib/types';
-import { BookOpen, Trophy, Award, Clock, ArrowRight, CheckCircle2, XCircle, ChevronRight, Activity, Calendar, X, Zap, RefreshCw, Monitor, Globe, ArrowLeft } from 'lucide-react';
+import { BookOpen, Trophy, Award, Clock, ArrowRight, CheckCircle2, XCircle, ChevronRight, Activity, Calendar, X, Zap, RefreshCw, Monitor, Globe, ArrowLeft, Lock, AlertTriangle } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface StudentDashboardProps {
@@ -29,6 +29,38 @@ export default function StudentDashboard({
   const [selectedLevel, setSelectedLevel] = useState<'LV1' | 'LV2' | 'LV3' | 'ALL'>('ALL');
   const [selectedExamForMode, setSelectedExamForMode] = useState<Exam | null>(null);
   const [activeModeSelection, setActiveModeSelection] = useState<'training' | 'testing' | 'race'>('training');
+
+  const [blockedModes, setBlockedModes] = useState<{ training: boolean; testing: boolean; race: boolean }>(() => {
+    if (typeof window !== 'undefined') {
+      return {
+        training: localStorage.getItem('ic3_block_training') === 'true',
+        testing: localStorage.getItem('ic3_block_testing') === 'true',
+        race: localStorage.getItem('ic3_block_race') === 'true',
+      };
+    }
+    return { training: false, testing: false, race: false };
+  });
+
+  // Listen for admin changes to the block mode settings
+  useEffect(() => {
+    const checkBlocked = () => {
+      if (typeof window !== 'undefined') {
+        setBlockedModes({
+          training: localStorage.getItem('ic3_block_training') === 'true',
+          testing: localStorage.getItem('ic3_block_testing') === 'true',
+          race: localStorage.getItem('ic3_block_race') === 'true',
+        });
+      }
+    };
+
+    checkBlocked();
+    window.addEventListener('ic3BlockSettingsChanged', checkBlocked);
+    window.addEventListener('storage', checkBlocked);
+    return () => {
+      window.removeEventListener('ic3BlockSettingsChanged', checkBlocked);
+      window.removeEventListener('storage', checkBlocked);
+    };
+  }, []);
 
   const levelDetails = {
     LV1: {
@@ -507,7 +539,13 @@ export default function StudentDashboard({
                           disabled={!preloadFinished}
                           onClick={() => {
                             setSelectedExamForMode(exam);
-                            setActiveModeSelection('training');
+                            if (!blockedModes.training) {
+                              setActiveModeSelection('training');
+                            } else if (!blockedModes.testing) {
+                              setActiveModeSelection('testing');
+                            } else if (!blockedModes.race) {
+                              setActiveModeSelection('race');
+                            }
                           }}
                           className={`mt-5 w-full py-2.5 text-xs font-bold rounded-xl flex items-center justify-center gap-1 transition-all duration-300 shadow-sm ${
                             !preloadFinished
@@ -555,23 +593,27 @@ export default function StudentDashboard({
                                 {/* 1. TRAINING MODE */}
                                 <button
                                   type="button"
+                                  disabled={blockedModes.training}
                                   onClick={() => setActiveModeSelection('training')}
                                   className={`w-full text-left p-2.5 rounded-xl border-2 transition duration-200 flex gap-3 ${
-                                    activeModeSelection === 'training'
+                                    blockedModes.training
+                                      ? 'opacity-50 cursor-not-allowed border-slate-100 bg-slate-100/50'
+                                      : activeModeSelection === 'training'
                                       ? 'border-blue-500 bg-blue-50/20'
                                       : 'border-slate-100 hover:border-slate-200 bg-slate-50/30'
                                   }`}
                                 >
-                                  <div className={`p-1.5 rounded-lg ${activeModeSelection === 'training' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'} shrink-0 flex items-center justify-center`}>
-                                    <BookOpen className="w-3.5 h-3.5" />
+                                  <div className={`p-1.5 rounded-lg ${blockedModes.training ? 'bg-slate-200 text-slate-400' : activeModeSelection === 'training' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'} shrink-0 flex items-center justify-center`}>
+                                    {blockedModes.training ? <Lock className="w-3.5 h-3.5 text-red-500" /> : <BookOpen className="w-3.5 h-3.5" />}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <h5 className="font-extrabold text-xs text-slate-800 flex items-center gap-1">
                                       Luyện tập
-                                      {activeModeSelection === 'training' && <span className="w-1 h-1 rounded-full bg-blue-500" />}
+                                      {blockedModes.training && <span className="ml-1 px-1 py-0.2 text-[8px] font-black bg-red-500 text-white rounded-full">ĐÃ KHÓA</span>}
+                                      {!blockedModes.training && activeModeSelection === 'training' && <span className="w-1 h-1 rounded-full bg-blue-500" />}
                                     </h5>
                                     <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed truncate">
-                                      Không giới hạn thời gian. Nộp từng câu xem ngay giải thích.
+                                      {blockedModes.training ? 'Giáo viên đã khóa chế độ này.' : 'Không giới hạn thời gian. Nộp từng câu xem ngay giải thích.'}
                                     </p>
                                   </div>
                                 </button>
@@ -579,23 +621,27 @@ export default function StudentDashboard({
                                 {/* 2. TESTING MODE */}
                                 <button
                                   type="button"
+                                  disabled={blockedModes.testing}
                                   onClick={() => setActiveModeSelection('testing')}
                                   className={`w-full text-left p-2.5 rounded-xl border-2 transition duration-200 flex gap-3 ${
-                                    activeModeSelection === 'testing'
+                                    blockedModes.testing
+                                      ? 'opacity-50 cursor-not-allowed border-slate-100 bg-slate-100/50'
+                                      : activeModeSelection === 'testing'
                                       ? 'border-blue-500 bg-blue-50/20'
                                       : 'border-slate-100 hover:border-slate-200 bg-slate-50/30'
                                   }`}
                                 >
-                                  <div className={`p-1.5 rounded-lg ${activeModeSelection === 'testing' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'} shrink-0 flex items-center justify-center`}>
-                                    <Clock className="w-3.5 h-3.5" />
+                                  <div className={`p-1.5 rounded-lg ${blockedModes.testing ? 'bg-slate-200 text-slate-400' : activeModeSelection === 'testing' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'} shrink-0 flex items-center justify-center`}>
+                                    {blockedModes.testing ? <Lock className="w-3.5 h-3.5 text-red-500" /> : <Clock className="w-3.5 h-3.5" />}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <h5 className="font-extrabold text-xs text-slate-800 flex items-center gap-1">
                                       Thi thử
-                                      {activeModeSelection === 'testing' && <span className="w-1 h-1 rounded-full bg-blue-500" />}
+                                      {blockedModes.testing && <span className="ml-1 px-1 py-0.2 text-[8px] font-black bg-red-500 text-white rounded-full">ĐÃ KHÓA</span>}
+                                      {!blockedModes.testing && activeModeSelection === 'testing' && <span className="w-1 h-1 rounded-full bg-blue-500" />}
                                     </h5>
                                     <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed truncate">
-                                      Giới hạn {exam.Duration || 40} phút. Chỉ chấm điểm và xem giải thích khi xong.
+                                      {blockedModes.testing ? 'Giáo viên đã khóa chế độ này.' : `Giới hạn ${exam.Duration || 40} phút. Chỉ chấm điểm và xem giải thích khi xong.`}
                                     </p>
                                   </div>
                                 </button>
@@ -603,27 +649,39 @@ export default function StudentDashboard({
                                 {/* 3. RACE MODE */}
                                 <button
                                   type="button"
+                                  disabled={blockedModes.race}
                                   onClick={() => setActiveModeSelection('race')}
                                   className={`w-full text-left p-2.5 rounded-xl border-2 transition duration-200 flex gap-3 ${
-                                    activeModeSelection === 'race'
+                                    blockedModes.race
+                                      ? 'opacity-50 cursor-not-allowed border-slate-100 bg-slate-100/50'
+                                      : activeModeSelection === 'race'
                                       ? 'border-amber-500 bg-amber-50/20'
                                       : 'border-slate-100 hover:border-slate-200 bg-slate-50/30'
                                   }`}
                                 >
-                                  <div className={`p-1.5 rounded-lg ${activeModeSelection === 'race' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400'} shrink-0 flex items-center justify-center`}>
-                                    <Trophy className="w-3.5 h-3.5" />
+                                  <div className={`p-1.5 rounded-lg ${blockedModes.race ? 'bg-slate-200 text-slate-400' : activeModeSelection === 'race' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400'} shrink-0 flex items-center justify-center`}>
+                                    {blockedModes.race ? <Lock className="w-3.5 h-3.5 text-red-500" /> : <Trophy className="w-3.5 h-3.5" />}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <h5 className="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
                                       Tốc độ sinh tử
-                                      <span className="px-1 py-0.2 text-[8px] font-black bg-amber-500 text-white rounded-full">HOT</span>
-                                      {activeModeSelection === 'race' && <span className="w-1 h-1 rounded-full bg-amber-500" />}
+                                      {!blockedModes.race && <span className="px-1 py-0.2 text-[8px] font-black bg-amber-500 text-white rounded-full">HOT</span>}
+                                      {blockedModes.race && <span className="ml-1 px-1 py-0.2 text-[8px] font-black bg-red-500 text-white rounded-full">ĐÃ KHÓA</span>}
+                                      {!blockedModes.race && activeModeSelection === 'race' && <span className="w-1 h-1 rounded-full bg-amber-500" />}
                                     </h5>
                                     <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed truncate">
-                                      Trả lời sai bất kỳ câu nào sẽ phải dừng cuộc chơi ngay.
+                                      {blockedModes.race ? 'Giáo viên đã khóa chế độ này.' : 'Trả lời sai bất kỳ câu nào sẽ phải dừng cuộc chơi ngay.'}
                                     </p>
                                   </div>
                                 </button>
+
+                                {/* Warning message if all modes blocked */}
+                                {blockedModes.training && blockedModes.testing && blockedModes.race && (
+                                  <div className="p-2.5 rounded-xl bg-red-50 border border-red-100 flex items-start gap-2 text-[10px] font-bold text-red-600 mt-2">
+                                    <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                                    <span>Tất cả các chế độ thi của đề này hiện đã bị giáo viên tạm khóa. Vui lòng đợi giáo viên mở khóa!</span>
+                                  </div>
+                                )}
                               </div>
                             </div>
 
@@ -639,13 +697,18 @@ export default function StudentDashboard({
                                 Hủy bỏ
                               </button>
                               <button
+                                disabled={blockedModes.training && blockedModes.testing && blockedModes.race}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   const mode = activeModeSelection;
                                   setSelectedExamForMode(null);
                                   onSelectExam(exam, exam.Level, mode);
                                 }}
-                                className="flex-[1.5] py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1 transition shadow-lg shadow-blue-100 cursor-pointer text-center"
+                                className={`flex-[1.5] py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition shadow-lg cursor-pointer text-center ${
+                                  blockedModes.training && blockedModes.testing && blockedModes.race
+                                    ? 'bg-slate-200 text-slate-400 shadow-none cursor-not-allowed'
+                                    : 'bg-blue-500 hover:bg-blue-600 text-white shadow-blue-100'
+                                }`}
                               >
                                 Bắt đầu <ChevronRight className="w-3.5 h-3.5" />
                               </button>
