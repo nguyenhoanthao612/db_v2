@@ -428,9 +428,9 @@ export default function StudentDashboard({
             </div>
           </div>
 
-          {/* Main Grid: Left is Exams, Right is level scores */}
+          {/* Main Grid: Left is Exams */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-5">
+            <div className="lg:col-span-3 space-y-5">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                 <h4 className="text-sm font-black text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
                   <BookOpen className="w-4 h-4 text-blue-500" /> Danh sách đề ôn tập ({filteredExams.length})
@@ -454,7 +454,7 @@ export default function StudentDashboard({
                   <p className="text-xs text-slate-400 mt-1">Quản trị viên có thể thêm đề bất kỳ lúc nào.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filteredExams.map((exam) => {
                     const isCompleted = scores.some((sc) => sc.ExamID === exam.ExamID && sc.Level === exam.Level);
                     const bestScore = scores
@@ -667,71 +667,6 @@ export default function StudentDashboard({
                   })}
                 </div>
               )}
-            </div>
-
-            {/* Level Scores */}
-            <div className="space-y-6">
-              <div>
-                <h4 className="text-sm font-black text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
-                  <Activity className="w-4 h-4 text-indigo-500" /> Kết quả thi {selectedLevel}
-                </h4>
-              </div>
-
-              <div className="space-y-3 max-h-[480px] overflow-y-auto pr-2 custom-scrollbar">
-                {scores.filter((s) => s.Level === selectedLevel).length === 0 ? (
-                  <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center text-slate-400">
-                    <Trophy className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                    <p className="text-xs font-bold">Chưa có kết quả ở cấp độ này.</p>
-                    <p className="text-[10px] text-slate-400 mt-1">Hãy làm các đề thi bên trái để rèn luyện điểm số của bạn nhé!</p>
-                  </div>
-                ) : (
-                  scores
-                    .filter((s) => s.Level === selectedLevel)
-                    .map((score, index) => (
-                      <div
-                        key={index}
-                        className="bg-slate-50 hover:bg-blue-50/50 border border-slate-100 rounded-xl p-4 transition duration-200 flex items-center justify-between gap-3"
-                      >
-                        <div className="space-y-1">
-                          <p className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
-                            Đề {score.ExamID}
-                          </p>
-                          <p className="text-[10px] text-slate-400 flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {new Date(score.SubmitTime).toLocaleString('vi-VN', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </p>
-                          <p className="text-[10px] font-medium text-slate-500">Thời gian: {formatTime(score.Time)}</p>
-                        </div>
-
-                        <div className="text-right">
-                          <span
-                            className={`text-sm font-black px-2.5 py-1 rounded-lg ${
-                              (score.Correct + score.Wrong) > 0
-                                ? (score.Correct / (score.Correct + score.Wrong) >= 0.8)
-                                  ? 'bg-green-100 text-green-700'
-                                  : (score.Correct / (score.Correct + score.Wrong) >= 0.5)
-                                    ? 'bg-blue-100 text-blue-700'
-                                    : 'bg-red-100 text-red-700'
-                                : 'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            {score.Score} điểm
-                          </span>
-                          <div className="flex gap-1.5 justify-end mt-1.5 text-[10px] font-bold text-slate-400">
-                            <span className="text-green-600">+{score.Correct}</span>
-                            <span>/</span>
-                            <span className="text-red-500">-{score.Wrong}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                )}
-              </div>
             </div>
           </div>
         </div>
