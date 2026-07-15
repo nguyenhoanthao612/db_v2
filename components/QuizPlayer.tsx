@@ -585,7 +585,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
       if (mode === 'testing') {
         // Initialize timer to exam duration in seconds if it's 0 or not initialized
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setTimer((prev) => (prev === 0 ? (exam.Duration || 50) * 60 : prev));
+        setTimer((prev) => (prev === 0 ? (exam.Duration || (questions.length > 100 ? 70 : 50)) * 60 : prev));
       } else {
         setTimer(0);
       }
@@ -793,7 +793,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
     });
 
     const elapsedSeconds = mode === 'testing'
-      ? Math.max(0, ((exam.Duration || 50) * 60) - timer)
+      ? Math.max(0, ((exam.Duration || (questions.length > 100 ? 70 : 50)) * 60) - timer)
       : timer;
 
     const record: ScoreRecord = {

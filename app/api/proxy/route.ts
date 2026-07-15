@@ -1,5 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+async function fetchWithRetry(url: string, init: RequestInit, retries = 3, delay = 1000): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url, init);
+      if (res.status === 429 || res.status >= 502) {
+        if (i < retries - 1) {
+          console.warn(`Fetch to ${url} returned status ${res.status}, retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 1.5;
+          continue;
+        }
+      }
+      return res;
+    } catch (err: any) {
+      if (i < retries - 1) {
+        console.warn(`Fetch to ${url} failed with error: ${err.message || err}. Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 1.5;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('Fetch failed after maximum retries');
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -17,7 +43,7 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    const response = await fetch(targetUrl.toString(), {
+    const response = await fetchWithRetry(targetUrl.toString(), {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -72,7 +98,7 @@ export async function POST(req: NextRequest) {
 
     const bodyText = await req.text();
 
-    const response = await fetch(targetUrl.toString(), {
+    const response = await fetchWithRetry(targetUrl.toString(), {
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain',

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { DatabaseService } from '@/lib/database-service';
 import { Exam } from '@/lib/types';
 import { useAdmin } from '@/components/admin/AdminContext';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, RefreshCw } from 'lucide-react';
 
 export default function ExamsPage() {
   const { syncTrigger, onSyncComplete } = useAdmin();
@@ -20,8 +20,16 @@ export default function ExamsPage() {
   const [opValue, setOpValue] = useState('');
   const [opTargetLevel, setOpTargetLevel] = useState<'LV1' | 'LV2' | 'LV3'>('LV1');
 
+  // Merge State
+  const [mergeSourceExams, setMergeSourceExams] = useState<{ Level: 'LV1' | 'LV2' | 'LV3'; ExamID: string }[]>([]);
+  const [mergeTargetLevel, setMergeTargetLevel] = useState<'LV1' | 'LV2' | 'LV3'>('LV1');
+  const [mergeTargetExamId, setMergeTargetExamId] = useState('');
+
   // Loading States
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Delete Confirmation State
+  const [examToDelete, setExamToDelete] = useState<{ level: 'LV1' | 'LV2' | 'LV3'; examId: string } | null>(null);
 
   const loadExams = async () => {
     try {
@@ -128,21 +136,52 @@ export default function ExamsPage() {
     setActionLoading(false);
   };
 
-  const handleDeleteExam = async (level: 'LV1' | 'LV2' | 'LV3', examId: string) => {
-    if (
-      !confirm(
-        `CẢNH BÁO: Xóa đề thi sẽ xóa cả Sheet ${level}_${examId} và XÓA TOÀN BỘ câu hỏi thuộc đề này! Bạn có muốn tiếp tục?`
-      )
-    ) {
-      return;
-    }
+  const handleDeleteExam = async () => {
+    if (!examToDelete) return;
+    const { level, examId } = examToDelete;
     setActionLoading(true);
     const success = await DatabaseService.deleteExam(level, examId);
     if (success) {
+      setExamToDelete(null);
       loadExams();
       onSyncComplete();
     }
     setActionLoading(false);
+  };
+
+  const handleMergeExamsSubmit = async () => {
+    if (mergeSourceExams.length < 2) {
+      alert('Vui lòng chọn từ 2 đề thi trở lên để gộp!');
+      return;
+    }
+    const targetId = mergeTargetExamId.trim().toUpperCase();
+    if (!targetId) {
+      alert('Vui lòng nhập tên đề thi mới!');
+      return;
+    }
+
+    // Check if target exam already exists
+    if (exams.some(ex => ex.ExamID === targetId && ex.Level === mergeTargetLevel)) {
+      alert(`Đề thi ${mergeTargetLevel}_${targetId} đã tồn tại! Vui lòng chọn tên khác để tạo đề mới hoàn toàn.`);
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const res = await DatabaseService.mergeExams(mergeSourceExams, mergeTargetLevel, targetId);
+      if (res.success) {
+        alert(`Đã gộp thành công ${res.questionCount} câu hỏi thành đề thi mới ${mergeTargetLevel}_${targetId}!`);
+        setMergeSourceExams([]);
+        setMergeTargetExamId('');
+        loadExams();
+        onSyncComplete();
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Đã xảy ra lỗi trong quá trình gộp đề thi!');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
@@ -190,6 +229,98 @@ export default function ExamsPage() {
         </div>
       </form>
 
+      {/* Merge Exams block */}
+      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4">
+        <div>
+          <h3 className="text-sm font-extrabold text-slate-800">Gộp các đề thi thành một đề mới (Trộn / Merge)</h3>
+          <p className="text-xs text-slate-400">Chọn 2 đề trở lên để gộp toàn bộ câu hỏi của các đề đó thành một đề thi mới hoàn toàn.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-3">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Bước 1: Chọn các đề thi cần gộp</label>
+            <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl bg-white p-3 space-y-2">
+              {exams.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-4 font-bold">Chưa có đề thi nào để chọn.</p>
+              ) : (
+                exams.map((ex) => {
+                  const isChecked = mergeSourceExams.some(src => src.Level === ex.Level && src.ExamID === ex.ExamID);
+                  return (
+                    <label key={`${ex.Level}_${ex.ExamID}`} className="flex items-center gap-2.5 p-1.5 hover:bg-slate-50 rounded-lg cursor-pointer transition select-none">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          if (isChecked) {
+                            setMergeSourceExams(prev => prev.filter(src => !(src.Level === ex.Level && src.ExamID === ex.ExamID)));
+                          } else {
+                            setMergeSourceExams(prev => [...prev, { Level: ex.Level, ExamID: ex.ExamID }]);
+                          }
+                        }}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                      />
+                      <div className="flex justify-between items-center w-full">
+                        <span className="text-xs font-extrabold text-slate-700">
+                          {ex.Level}_{ex.ExamID}
+                        </span>
+                        <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-md">
+                          {ex.QuestionIDs?.length || 0} câu
+                        </span>
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+            {mergeSourceExams.length > 0 && (
+              <p className="text-[10px] text-blue-600 font-bold">
+                Đã chọn: {mergeSourceExams.map(ex => `${ex.Level}_${ex.ExamID}`).join(', ')}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Bước 2: Thông tin đề thi mới</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Cấp độ (Level)</label>
+                <select
+                  value={mergeTargetLevel}
+                  onChange={(e) => setMergeTargetLevel(e.target.value as any)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white font-bold text-slate-700 focus:outline-none"
+                >
+                  <option value="LV1">Level 1 (LV1)</option>
+                  <option value="LV2">Level 2 (LV2)</option>
+                  <option value="LV3">Level 3 (LV3)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Tên Đề mới (ExamID)</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="ví dụ: OT_GOP"
+                  value={mergeTargetExamId}
+                  onChange={(e) => setMergeTargetExamId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none bg-white font-bold"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleMergeExamsSubmit}
+              disabled={actionLoading || mergeSourceExams.length < 2 || !mergeTargetExamId.trim()}
+              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-xs font-extrabold rounded-xl flex items-center justify-center gap-1.5 shadow cursor-pointer transition font-bold"
+            >
+              <RefreshCw className="w-4 h-4" /> {actionLoading ? 'Đang gộp...' : 'Bắt đầu gộp đề thi'}
+            </button>
+            <p className="text-[10px] text-slate-400 leading-normal">
+              * Quy tắc: Đề mới gộp xong sẽ tự động thừa hưởng toàn bộ câu hỏi. Nếu tổng số câu hỏi <strong>lớn hơn 100 câu</strong>, thời gian làm bài mặc định được cài là <strong>70 phút</strong> (ngược lại là 50 phút).
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* ACTIVE EXAMS LIST */}
       <div className="space-y-4">
         <div>
@@ -212,7 +343,7 @@ export default function ExamsPage() {
                 </div>
                 <h4 className="text-sm font-black text-slate-800">Đề Ôn Tập: {exam.ExamID}</h4>
                 <p className="text-xs text-slate-400 font-bold">Số lượng câu hỏi đã gán: {exam.QuestionIDs?.length || 0} câu</p>
-                <p className="text-xs text-blue-600 font-extrabold bg-blue-50/50 px-2.5 py-1 rounded-lg w-fit">⏱️ Thời gian: {exam.Duration || 50} phút</p>
+                <p className="text-xs text-blue-600 font-extrabold bg-blue-50/50 px-2.5 py-1 rounded-lg w-fit">⏱️ Thời gian: {exam.Duration || (exam.QuestionIDs?.length > 100 ? 70 : 50)} phút</p>
               </div>
 
               {/* Actions buttons */}
@@ -252,14 +383,14 @@ export default function ExamsPage() {
                   onClick={() => {
                     setSelectedExamForOp(exam);
                     setExamOpType('duration');
-                    setOpValue(String(exam.Duration || 50));
+                    setOpValue(String(exam.Duration || (exam.QuestionIDs?.length > 100 ? 70 : 50)));
                   }}
                   className="py-1.5 bg-blue-50 hover:bg-blue-100/80 rounded-lg text-blue-600 transition cursor-pointer text-center font-extrabold"
                 >
                   Thời gian thi
                 </button>
                 <button
-                  onClick={() => handleDeleteExam(exam.Level, exam.ExamID)}
+                  onClick={() => setExamToDelete({ level: exam.Level, examId: exam.ExamID })}
                   className="py-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-red-600 transition cursor-pointer text-center col-span-2"
                 >
                   Xóa đề thi
@@ -389,6 +520,56 @@ export default function ExamsPage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* CUSTOM DELETE CONFIRMATION MODAL */}
+      {examToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-red-600 shrink-0">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-extrabold text-slate-800">Xác nhận xóa đề thi</h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Bạn đang chuẩn bị xóa đề thi <strong className="text-slate-700">{examToDelete.level}_{examToDelete.examId}</strong>.
+                </p>
+                <p className="text-[11px] text-red-500 font-bold leading-relaxed bg-red-50 p-2 rounded-lg mt-2">
+                  CẢNH BÁO: Hành động này sẽ xóa vĩnh viễn Sheet đề thi tương ứng trên Google Sheets và TOÀN BỘ câu hỏi thuộc đề này! Bạn có muốn tiếp tục?
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => setExamToDelete(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={handleDeleteExam}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-lg shadow-red-200 flex items-center gap-1.5"
+              >
+                {actionLoading ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Đang xóa...
+                  </>
+                ) : (
+                  'Đồng ý xóa'
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

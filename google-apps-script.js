@@ -190,6 +190,24 @@ function doPost(e) {
       return createResponse({ success: true, message: "Tạo đề " + sheetName + " thành công." });
     }
     
+    if (action === "updateExamQuestionIDs") {
+      var level = postData.level;
+      var examId = postData.examId;
+      var questionIds = postData.questionIds || [];
+      var sheetName = level + "_" + examId;
+      
+      var sheet = ss.getSheetByName(sheetName);
+      if (!sheet) {
+        sheet = ss.insertSheet(sheetName);
+      }
+      sheet.clear();
+      sheet.appendRow(["QuestionID"]);
+      for (var i = 0; i < questionIds.length; i++) {
+        sheet.appendRow([questionIds[i]]);
+      }
+      return createResponse({ success: true, message: "Đã cập nhật danh sách " + questionIds.length + " câu hỏi cho đề " + sheetName + " thành công." });
+    }
+    
     if (action === "renameExam") {
       var oldLevel = postData.oldLevel;
       var oldExamId = postData.oldExamId;
@@ -363,6 +381,80 @@ function doPost(e) {
     // 2. QUẢN LÝ CÂU HỎI (CRUD QUESTIONS)
     // ==========================================
     
+    if (action === "saveQuestionsBatch") {
+      var questionsSheet = ss.getSheetByName("Questions");
+      if (!questionsSheet) {
+        return createResponse({ success: false, message: "Không có bảng Questions." });
+      }
+      
+      var questionsList = postData.questions || [];
+      var qData = readSheetData(questionsSheet);
+      var headers = getHeaders(questionsSheet);
+      
+      var existingMap = {};
+      qData.forEach(function(item, idx) {
+        existingMap[item.QuestionID] = idx + 2;
+      });
+      
+      var examSheetAppendMap = {};
+      
+      questionsList.forEach(function(q) {
+        var rowValues = [
+          q.QuestionID,
+          q.ExamID,
+          q.Level,
+          q.QuestionType,
+          q.QuestionContent,
+          q.Answers,
+          q.CorrectAnswer,
+          q.Explanation,
+          q.Image || "",
+          q.Video || "",
+          q.Audio || "",
+          q.Score || 10,
+          q.CreatedAt || new Date().toISOString()
+        ];
+        
+        var rowNum = existingMap[q.QuestionID];
+        if (rowNum) {
+          for (var c = 0; c < headers.length; c++) {
+            var key = headers[c];
+            var val = q[key] !== undefined ? q[key] : (rowValues[c] || "");
+            if (typeof val === 'object') {
+              val = JSON.stringify(val);
+            }
+            var colNum = c + 1;
+            questionsSheet.getRange(rowNum, colNum).setValue(val);
+          }
+        } else {
+          questionsSheet.appendRow(rowValues);
+          existingMap[q.QuestionID] = questionsSheet.getLastRow();
+        }
+        
+        var examSheetName = q.Level + "_" + q.ExamID;
+        if (!examSheetAppendMap[examSheetName]) {
+          examSheetAppendMap[examSheetName] = [];
+        }
+        examSheetAppendMap[examSheetName].push(q.QuestionID);
+      });
+      
+      for (var examSheetName in examSheetAppendMap) {
+        var examSheet = ss.getSheetByName(examSheetName);
+        if (examSheet) {
+          var examQIDs = getColumnValues(examSheet, "QuestionID");
+          var incomingQIDs = examSheetAppendMap[examSheetName];
+          incomingQIDs.forEach(function(qId) {
+            if (examQIDs.indexOf(qId) === -1) {
+              examSheet.appendRow([qId]);
+              examQIDs.push(qId);
+            }
+          });
+        }
+      }
+      
+      return createResponse({ success: true, message: "Đã gộp và lưu đồng bộ " + questionsList.length + " câu hỏi thành công." });
+    }
+
     if (action === "saveQuestion") {
       var questionsSheet = ss.getSheetByName("Questions");
       if (!questionsSheet) {

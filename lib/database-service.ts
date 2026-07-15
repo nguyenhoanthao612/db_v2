@@ -467,12 +467,22 @@ export class DatabaseService {
     let filtered = [...allQuestions];
 
     if (filters) {
-      if (filters.level) {
-        filtered = filtered.filter(q => q.Level === filters.level);
-      }
       if (filters.examId) {
         const targetExamId = filters.examId.trim().toUpperCase();
-        filtered = filtered.filter(q => q.ExamID?.trim().toUpperCase() === targetExamId);
+        const exams = getLocalStorage<Exam[]>(this.KEY_EXAMS, initialExams);
+        const targetExam = exams.find(
+          e =>
+            e.ExamID === targetExamId &&
+            (!filters.level || e.Level === filters.level)
+        );
+        if (targetExam) {
+          const qIds = (targetExam.QuestionIDs || []).map(id => id.trim().toUpperCase());
+          filtered = filtered.filter(q => qIds.includes(q.QuestionID.trim().toUpperCase()));
+        } else {
+          filtered = filtered.filter(q => q.ExamID?.trim().toUpperCase() === targetExamId);
+        }
+      } else if (filters.level) {
+        filtered = filtered.filter(q => q.Level === filters.level);
       }
       if (filters.type) {
         filtered = filtered.filter(q => q.QuestionType === filters.type);
@@ -936,6 +946,73 @@ export class DatabaseService {
     }
     setLocalStorage(this.KEY_SCORES, scores);
     return true;
+  }
+
+  // Merge multiple exams into a new one
+  public static async mergeExams(
+    sourceExams: { Level: 'LV1' | 'LV2' | 'LV3'; ExamID: string }[],
+    targetLevel: 'LV1' | 'LV2' | 'LV3',
+    targetExamId: string
+  ): Promise<{ success: boolean; questionCount: number }> {
+    this.initLocalStorage();
+    const config = this.getSyncConfig();
+    const targetExamIdUpper = targetExamId.trim().toUpperCase();
+
+    // 1. Load all exams locally
+    const exams = getLocalStorage<Exam[]>(this.KEY_EXAMS, initialExams);
+
+    // Check if target exam already exists, or initialize it
+    let targetExam = exams.find(e => e.ExamID === targetExamIdUpper && e.Level === targetLevel);
+    if (!targetExam) {
+      targetExam = {
+        ExamID: targetExamIdUpper,
+        Level: targetLevel,
+        QuestionIDs: [],
+      };
+      exams.push(targetExam);
+    }
+
+    // 2. Gather unique question IDs from all selected source exams
+    const mergedQuestionIDs: string[] = [];
+    for (const src of sourceExams) {
+      const srcExam = exams.find(e => e.ExamID === src.ExamID && e.Level === src.Level);
+      if (srcExam && srcExam.QuestionIDs) {
+        for (const qId of srcExam.QuestionIDs) {
+          if (!mergedQuestionIDs.includes(qId)) {
+            mergedQuestionIDs.push(qId);
+          }
+        }
+      }
+    }
+
+    // Update target exam's question list
+    targetExam.QuestionIDs = mergedQuestionIDs;
+
+    // Apply rule: nếu đề nào hơn 100 câu hỏi thì thời gian làm mặc định là 70 phút. Ngược lại mặc định là 50 phút.
+    if (mergedQuestionIDs.length > 100) {
+      targetExam.Duration = 70;
+    } else {
+      targetExam.Duration = 50;
+    }
+
+    // 3. Update the sheet for the merged exam on Google Sheets if configured
+    if (config.appsScriptUrl) {
+      try {
+        console.log(`Syncing ${mergedQuestionIDs.length} referenced QuestionIDs to merged exam sheet ${targetLevel}_${targetExamIdUpper}...`);
+        await this.callAppsScript('updateExamQuestionIDs', {}, {
+          level: targetLevel,
+          examId: targetExamIdUpper,
+          questionIds: mergedQuestionIDs
+        });
+      } catch (e) {
+        console.error('Failed to sync merged exam questions to Google Sheets', e);
+      }
+    }
+
+    // Save changes to local storage
+    setLocalStorage(this.KEY_EXAMS, exams);
+
+    return { success: true, questionCount: mergedQuestionIDs.length };
   }
 
   // Reset all local storage values
