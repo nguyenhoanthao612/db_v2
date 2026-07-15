@@ -636,7 +636,7 @@ function doPost(e) {
       if (!scoreSheet) {
         // Nếu Score sheet không tồn tại, tự động tạo mới với các cột cơ bản ban đầu
         scoreSheet = ss.insertSheet("Score");
-        scoreSheet.appendRow(["StudentID", "StudentName", "SchoolName", "ClassGroup", "Level"]);
+        scoreSheet.appendRow(["StudentID", "StudentName", "SchoolName", "ClassGroup", "Level", "Time", "SubmitTime"]);
       }
       
       var scoreRec = postData.scoreRecord;
@@ -656,6 +656,11 @@ function doPost(e) {
       if (scoreVal === undefined || scoreVal === null || scoreVal === "") {
         scoreVal = getProp(scoreRec, "score");
       }
+      var timeVal = getProp(scoreRec, "Time");
+      if (timeVal === undefined || timeVal === null || timeVal === "") {
+        timeVal = getProp(scoreRec, "time");
+      }
+      var submitTimeVal = getProp(scoreRec, "SubmitTime") || getProp(scoreRec, "submitTime") || new Date().toISOString();
 
       // Kiểm tra đầy đủ các trường bắt buộc
       var missingFields = [];
@@ -676,6 +681,24 @@ function doPost(e) {
 
       // 1. Kiểm tra và tự động thêm cột đề thi nếu chưa tồn tại
       var headers = getHeaders(scoreSheet);
+      // Đảm bảo các cột cơ bản tồn tại trong headers
+      var leftBaseCols = ["StudentID", "StudentName", "SchoolName", "ClassGroup", "Level"];
+      var rightBaseCols = ["Time", "SubmitTime"];
+
+      leftBaseCols.forEach(function(col) {
+        if (headers.indexOf(col) === -1) {
+          scoreSheet.getRange(1, headers.length + 1).setValue(col);
+          headers.push(col);
+        }
+      });
+
+      rightBaseCols.forEach(function(col) {
+        if (headers.indexOf(col) === -1) {
+          scoreSheet.getRange(1, headers.length + 1).setValue(col);
+          headers.push(col);
+        }
+      });
+
       var examColumnName = examId.toString().trim();
       var colNum = -1;
       
@@ -687,11 +710,31 @@ function doPost(e) {
       }
 
       if (colNum === -1) {
-        var nextColIndex = headers.length + 1;
-        scoreSheet.getRange(1, nextColIndex).setValue(examColumnName);
-        colNum = nextColIndex;
-        // Cập nhật lại danh sách headers
-        headers.push(examColumnName);
+        // Cột này chưa tồn tại, ta cần chèn nó vào bên trái các cột Time và SubmitTime.
+        // Tìm vị trí cột đầu tiên trong rightBaseCols hiện có trong headers.
+        var insertAt = -1;
+        for (var i = 0; i < headers.length; i++) {
+          var h = headers[i].toString().trim();
+          if (rightBaseCols.indexOf(h) !== -1) {
+            insertAt = i + 1; // 1-indexed column position
+            break;
+          }
+        }
+        
+        if (insertAt !== -1) {
+          // Chèn cột mới trước vị trí insertAt
+          scoreSheet.insertColumnBefore(insertAt);
+          scoreSheet.getRange(1, insertAt).setValue(examColumnName);
+          colNum = insertAt;
+          // Cập nhật lại danh sách headers để đồng bộ bộ nhớ
+          headers.splice(insertAt - 1, 0, examColumnName);
+        } else {
+          // Nếu không tìm thấy Time/SubmitTime (trường hợp hiếm), ta append vào cuối
+          var nextColIndex = headers.length + 1;
+          scoreSheet.getRange(1, nextColIndex).setValue(examColumnName);
+          colNum = nextColIndex;
+          headers.push(examColumnName);
+        }
       }
 
       // 2. Tìm dòng của học sinh dựa trên StudentID + Level
@@ -699,13 +742,8 @@ function doPost(e) {
       var foundRowIndex = -1;
       
       if (lastRow > 1) {
-        var studentIdColIdx = -1;
-        var levelColIdx = -1;
-        for (var i = 0; i < headers.length; i++) {
-          var h = headers[i].toString().trim();
-          if (h === "StudentID") studentIdColIdx = i + 1;
-          if (h === "Level") levelColIdx = i + 1;
-        }
+        var studentIdColIdx = headers.indexOf("StudentID") + 1;
+        var levelColIdx = headers.indexOf("Level") + 1;
         
         if (studentIdColIdx > 0 && levelColIdx > 0) {
           var studentIds = scoreSheet.getRange(2, studentIdColIdx, lastRow - 1, 1).getValues();
@@ -727,6 +765,8 @@ function doPost(e) {
         updateCell(scoreSheet, foundRowIndex, "StudentName", studentName);
         updateCell(scoreSheet, foundRowIndex, "SchoolName", schoolName);
         updateCell(scoreSheet, foundRowIndex, "ClassGroup", classGroup);
+        updateCell(scoreSheet, foundRowIndex, "Time", timeVal);
+        updateCell(scoreSheet, foundRowIndex, "SubmitTime", submitTimeVal);
         scoreSheet.getRange(foundRowIndex, colNum).setValue(Number(scoreVal));
       } else {
         // Tạo dòng mới có số ô bằng số lượng headers hiện tại
@@ -738,6 +778,8 @@ function doPost(e) {
           else if (h === "SchoolName") newRow.push(schoolName);
           else if (h === "ClassGroup") newRow.push(classGroup);
           else if (h === "Level") newRow.push(level);
+          else if (h === "Time") newRow.push(timeVal);
+          else if (h === "SubmitTime") newRow.push(submitTimeVal);
           else if (h === examColumnName) newRow.push(Number(scoreVal));
           else newRow.push(""); // các cột đề thi khác thì để trống
         }

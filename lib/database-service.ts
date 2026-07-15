@@ -36,7 +36,7 @@ export class DatabaseService {
   // Helper to parse dynamic-column score row-objects into individual ScoreRecord[]
   public static parseRawScoresToRecords(rawScores: any[]): ScoreRecord[] {
     const records: ScoreRecord[] = [];
-    const baseKeys = ['studentid', 'studentname', 'schoolname', 'classgroup', 'level'];
+    const baseKeys = ['studentid', 'studentname', 'schoolname', 'classgroup', 'level', 'examid', 'time', 'submittime', 'score', 'correct', 'wrong'];
 
     for (const row of rawScores) {
       const studentId = row.StudentID || row.studentId || '';
@@ -46,6 +46,9 @@ export class DatabaseService {
       const studentName = row.StudentName || row.studentName || 'Học sinh ẩn danh';
       const schoolName = row.SchoolName || row.schoolName || 'Trường chưa xác định';
       const classGroup = row.ClassGroup || row.classGroup || 'Lớp chưa xác định';
+      
+      const timeVal = row.Time !== undefined ? Number(row.Time) : (row.time !== undefined ? Number(row.time) : 0);
+      const submitTimeVal = row.SubmitTime || row.submitTime || new Date().toISOString();
 
       for (const [key, value] of Object.entries(row)) {
         const lowerKey = key.toLowerCase();
@@ -60,8 +63,8 @@ export class DatabaseService {
             Score: Number(value),
             Correct: 0,
             Wrong: 0,
-            Time: 0,
-            SubmitTime: new Date().toISOString()
+            Time: timeVal,
+            SubmitTime: submitTimeVal
           });
         }
       }
