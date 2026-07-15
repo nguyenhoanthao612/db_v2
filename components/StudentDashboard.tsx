@@ -588,7 +588,7 @@ export default function StudentDashboard({
                                       {!blockedModes.testing && activeModeSelection === 'testing' && <span className="w-1 h-1 rounded-full bg-blue-500" />}
                                     </h5>
                                     <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed truncate">
-                                      {blockedModes.testing ? 'Giáo viên đã khóa chế độ này.' : `Giới hạn ${exam.Duration || 40} phút. Chỉ chấm điểm và xem giải thích khi xong.`}
+                                      {blockedModes.testing ? 'Giáo viên đã khóa chế độ này.' : `Giới hạn ${exam.Duration || 50} phút. Chỉ chấm điểm và xem giải thích khi xong.`}
                                     </p>
                                   </div>
                                 </button>

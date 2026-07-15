@@ -212,7 +212,7 @@ export default function ExamsPage() {
                 </div>
                 <h4 className="text-sm font-black text-slate-800">Đề Ôn Tập: {exam.ExamID}</h4>
                 <p className="text-xs text-slate-400 font-bold">Số lượng câu hỏi đã gán: {exam.QuestionIDs?.length || 0} câu</p>
-                <p className="text-xs text-blue-600 font-extrabold bg-blue-50/50 px-2.5 py-1 rounded-lg w-fit">⏱️ Thời gian: {exam.Duration || 40} phút</p>
+                <p className="text-xs text-blue-600 font-extrabold bg-blue-50/50 px-2.5 py-1 rounded-lg w-fit">⏱️ Thời gian: {exam.Duration || 50} phút</p>
               </div>
 
               {/* Actions buttons */}
@@ -252,7 +252,7 @@ export default function ExamsPage() {
                   onClick={() => {
                     setSelectedExamForOp(exam);
                     setExamOpType('duration');
-                    setOpValue(String(exam.Duration || 40));
+                    setOpValue(String(exam.Duration || 50));
                   }}
                   className="py-1.5 bg-blue-50 hover:bg-blue-100/80 rounded-lg text-blue-600 transition cursor-pointer text-center font-extrabold"
                 >
