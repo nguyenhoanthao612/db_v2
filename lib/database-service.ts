@@ -257,12 +257,21 @@ export class DatabaseService {
       });
 
       if (questionsRes && questionsRes.success && questionsRes.data) {
-        const formattedQuestions = questionsRes.data.map((q: any) => ({
-          ...q,
-          ExamID: q.ExamID?.trim().toUpperCase(),
-          QuestionID: q.QuestionID?.trim().toUpperCase(),
-          Score: Number(q.Score || 10),
-        }));
+        const rawQs = questionsRes.data
+          .filter((q: any) => q && q.QuestionID && q.QuestionID.toString().trim() !== '')
+          .map((q: any) => ({
+            ...q,
+            ExamID: q.ExamID?.trim().toUpperCase(),
+            QuestionID: q.QuestionID?.trim().toUpperCase(),
+            Score: Number(q.Score || 10),
+          }));
+
+        const uniqueMap = new Map<string, any>();
+        rawQs.forEach((q: any) => {
+          uniqueMap.set(q.QuestionID, q);
+        });
+        const formattedQuestions = Array.from(uniqueMap.values());
+
         setLocalStorage(this.KEY_QUESTIONS, formattedQuestions);
         return { success: true, message: 'Đồng bộ ngân hàng câu hỏi thành công!' };
       }
@@ -335,12 +344,21 @@ export class DatabaseService {
 
       if (questionsRes && questionsRes.success && questionsRes.data) {
         // Correct dates and fields
-        const formattedQuestions = questionsRes.data.map((q: any) => ({
-          ...q,
-          ExamID: q.ExamID?.trim().toUpperCase(),
-          QuestionID: q.QuestionID?.trim().toUpperCase(),
-          Score: Number(q.Score || 10),
-        }));
+        const rawQs = questionsRes.data
+          .filter((q: any) => q && q.QuestionID && q.QuestionID.toString().trim() !== '')
+          .map((q: any) => ({
+            ...q,
+            ExamID: q.ExamID?.trim().toUpperCase(),
+            QuestionID: q.QuestionID?.trim().toUpperCase(),
+            Score: Number(q.Score || 10),
+          }));
+
+        const uniqueMap = new Map<string, any>();
+        rawQs.forEach((q: any) => {
+          uniqueMap.set(q.QuestionID, q);
+        });
+        const formattedQuestions = Array.from(uniqueMap.values());
+
         setLocalStorage(this.KEY_QUESTIONS, formattedQuestions);
       }
 

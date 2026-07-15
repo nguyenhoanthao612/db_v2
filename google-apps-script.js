@@ -393,7 +393,10 @@ function doPost(e) {
       
       var existingMap = {};
       qData.forEach(function(item, idx) {
-        existingMap[item.QuestionID] = idx + 2;
+        if (item.QuestionID) {
+          var cleanId = item.QuestionID.toString().trim().toUpperCase();
+          existingMap[cleanId] = idx + 2;
+        }
       });
       
       var examSheetAppendMap = {};
@@ -415,7 +418,8 @@ function doPost(e) {
           q.CreatedAt || new Date().toISOString()
         ];
         
-        var rowNum = existingMap[q.QuestionID];
+        var cleanQId = (q.QuestionID || "").toString().trim().toUpperCase();
+        var rowNum = existingMap[cleanQId];
         if (rowNum) {
           for (var c = 0; c < headers.length; c++) {
             var key = headers[c];
@@ -444,9 +448,10 @@ function doPost(e) {
           var examQIDs = getColumnValues(examSheet, "QuestionID");
           var incomingQIDs = examSheetAppendMap[examSheetName];
           incomingQIDs.forEach(function(qId) {
-            if (examQIDs.indexOf(qId) === -1) {
+            var qIdUpper = qId.toString().trim().toUpperCase();
+            if (examQIDs.indexOf(qIdUpper) === -1) {
               examSheet.appendRow([qId]);
-              examQIDs.push(qId);
+              examQIDs.push(qIdUpper);
             }
           });
         }
@@ -462,8 +467,11 @@ function doPost(e) {
       }
       
       var q = postData.question;
+      var qIdUpper = (q.QuestionID || "").toString().trim().toUpperCase();
       var qData = readSheetData(questionsSheet);
-      var existingIndex = qData.findIndex(function(item) { return item.QuestionID === q.QuestionID; });
+      var existingIndex = qData.findIndex(function(item) { 
+        return (item.QuestionID || "").toString().trim().toUpperCase() === qIdUpper; 
+      });
       
       var rowValues = [
         q.QuestionID,
@@ -501,7 +509,7 @@ function doPost(e) {
         var examSheet = ss.getSheetByName(examSheetName);
         if (examSheet) {
           var examQIDs = getColumnValues(examSheet, "QuestionID");
-          if (examQIDs.indexOf(q.QuestionID) === -1) {
+          if (examQIDs.indexOf(qIdUpper) === -1) {
             examSheet.appendRow([q.QuestionID]);
           }
         }
@@ -529,8 +537,11 @@ function doPost(e) {
         return createResponse({ success: false, message: "Không tìm thấy bảng Questions." });
       }
       
+      var qIdUpper = (qId || "").toString().trim().toUpperCase();
       var qData = readSheetData(questionsSheet);
-      var idx = qData.findIndex(function(item) { return item.QuestionID === qId; });
+      var idx = qData.findIndex(function(item) { 
+        return (item.QuestionID || "").toString().trim().toUpperCase() === qIdUpper; 
+      });
       
       if (idx !== -1) {
         var question = qData[idx];
@@ -541,7 +552,7 @@ function doPost(e) {
         var examSheet = ss.getSheetByName(examSheetName);
         if (examSheet) {
           var qIds = getColumnValues(examSheet, "QuestionID");
-          var qIdx = qIds.indexOf(qId);
+          var qIdx = qIds.indexOf(qIdUpper);
           if (qIdx !== -1) {
             examSheet.deleteRow(qIdx + 2); // +2 vì header
           }
@@ -850,10 +861,20 @@ function getColumnValues(sheet, columnName) {
   
   var headers = getHeaders(sheet);
   var colIndex = headers.indexOf(columnName) + 1;
+  if (colIndex === 0) {
+    for (var i = 0; i < headers.length; i++) {
+      if (normalizeHeaderKey(headers[i]) === columnName) {
+        colIndex = i + 1;
+        break;
+      }
+    }
+  }
   if (colIndex === 0) return [];
   
   var values = sheet.getRange(2, colIndex, lastRow - 1, 1).getValues();
-  return values.map(function(row) { return row[0].toString(); }).filter(Boolean);
+  return values.map(function(row) { 
+    return row[0] ? row[0].toString().trim().toUpperCase() : ""; 
+  }).filter(Boolean);
 }
 
 function updateCell(sheet, rowNum, columnName, value) {
