@@ -3,63 +3,57 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Exam, Question, ScoreRecord, QuestionAnswers } from '@/lib/types';
 import { DatabaseService } from '@/lib/database-service';
-import { Check, X, Clock, Award, AlertCircle, ArrowLeft, ArrowRight, Save, Play, RefreshCw, Volume2, HelpCircle, Flag, GripVertical } from 'lucide-react';
+import { Check, X, Clock, Award, AlertCircle, ArrowLeft, ArrowRight, Save, Play, Pause, RotateCcw, RefreshCw, Volume2, HelpCircle, Flag, GripVertical } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const parseVideoUrl = (urlStr: string) => {
   if (!urlStr) return null;
-  const trimmed = urlStr.trim();
+  let trimmed = urlStr.trim();
   if (!trimmed) return null;
+  
+  // Extract URL from iframe if user pasted embed code
+  if (trimmed.includes('<iframe') || trimmed.startsWith('<')) {
+    const srcMatch = trimmed.match(/src=["']([^"']+)["']/i);
+    if (srcMatch && srcMatch[1]) {
+      trimmed = srcMatch[1].trim();
+    }
+  }
   
   try {
     const url = new URL(trimmed);
-    const hostname = url.hostname.toLowerCase();
-    
-    if (
-      hostname.includes('youtube.com') ||
-      hostname.includes('youtu.be') ||
-      hostname.includes('youtube-nocookie.com')
-    ) {
-      let videoId: string | null = null;
-      if (hostname.includes('youtu.be')) {
-        videoId = url.pathname.substring(1);
-      } else if (url.pathname.startsWith('/embed/')) {
-        videoId = url.pathname.split('/')[2];
-      } else if (url.pathname.startsWith('/v/')) {
-        videoId = url.pathname.split('/')[2];
-      } else {
-        videoId = url.searchParams.get('v');
-      }
-      
-      if (videoId) {
-        const cleanId = videoId.split('&')[0];
-        return {
-          type: 'youtube',
-          url: `https://www.youtube.com/embed/${cleanId}`
-        };
-      }
-    }
-    
-    if (hostname.includes('vimeo.com')) {
-      const parts = url.pathname.split('/');
-      const videoId = parts[parts.length - 1] || parts[parts.length - 2];
-      if (videoId && /^\d+$/.test(videoId)) {
-        return {
-          type: 'vimeo',
-          url: `https://player.vimeo.com/video/${videoId}`
-        };
-      }
-    }
-    
     if (url.protocol === 'http:' || url.protocol === 'https:') {
       return {
-        type: 'direct',
+        type: 'embed',
         url: trimmed
       };
     }
     return null;
   } catch (e) {
     return null;
+  }
+};
+
+const getConfiguredEmbedUrl = (urlStr: string) => {
+  try {
+    const url = new URL(urlStr);
+    const host = url.hostname.toLowerCase();
+    if (host.includes('youtube.com') || host.includes('youtu.be') || host.includes('youtube-nocookie.com')) {
+      url.searchParams.set('enablejsapi', '1');
+      url.searchParams.set('controls', '0');       // Hide YouTube controls completely
+      url.searchParams.set('modestbranding', '1');  // Hide logo
+      url.searchParams.set('rel', '0');             // Hide related videos
+      url.searchParams.set('showinfo', '0');        // Hide video info
+      url.searchParams.set('fs', '0');              // Disable fullscreen button
+      url.searchParams.set('iv_load_policy', '3');  // Hide video annotations
+      url.searchParams.set('disablekb', '1');       // Disable keyboard controls
+      url.searchParams.set('autoplay', '0');
+    } else if (host.includes('vimeo.com')) {
+      url.searchParams.set('api', '1');
+      url.searchParams.set('controls', '0');
+    }
+    return url.toString();
+  } catch (e) {
+    return urlStr;
   }
 };
 
@@ -90,6 +84,97 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
   const [submittedQuestions, setSubmittedQuestions] = useState<Record<string, { isCorrect: boolean }>>({});
   const [isReviewMode, setIsReviewMode] = useState(false);
   const [cheatWarning, setCheatWarning] = useState<string | null>(null);
+
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const videoIframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsVideoPlaying(false);
+  }, [currentIdx]);
+
+  const togglePlayPause = () => {
+    if (!videoIframeRef.current) return;
+    const currentQ = questions[currentIdx];
+    if (!currentQ || !currentQ.Video) return;
+    
+    const parsed = parseVideoUrl(currentQ.Video);
+    if (!parsed) return;
+    
+    try {
+      const host = new URL(parsed.url).hostname.toLowerCase();
+      const isYoutube = host.includes('youtube.com') || host.includes('youtu.be') || host.includes('youtube-nocookie.com');
+      const isVimeo = host.includes('vimeo.com');
+
+      if (isVideoPlaying) {
+        if (isYoutube) {
+          videoIframeRef.current.contentWindow?.postMessage(
+            JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }),
+            '*'
+          );
+        } else if (isVimeo) {
+          videoIframeRef.current.contentWindow?.postMessage(
+            JSON.stringify({ method: 'pause' }),
+            '*'
+          );
+        }
+        setIsVideoPlaying(false);
+      } else {
+        if (isYoutube) {
+          videoIframeRef.current.contentWindow?.postMessage(
+            JSON.stringify({ event: 'command', func: 'playVideo', args: [] }),
+            '*'
+          );
+        } else if (isVimeo) {
+          videoIframeRef.current.contentWindow?.postMessage(
+            JSON.stringify({ method: 'play' }),
+            '*'
+          );
+        }
+        setIsVideoPlaying(true);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleRestartVideo = () => {
+    if (!videoIframeRef.current) return;
+    const currentQ = questions[currentIdx];
+    if (!currentQ || !currentQ.Video) return;
+    
+    const parsed = parseVideoUrl(currentQ.Video);
+    if (!parsed) return;
+    
+    try {
+      const host = new URL(parsed.url).hostname.toLowerCase();
+      const isYoutube = host.includes('youtube.com') || host.includes('youtu.be') || host.includes('youtube-nocookie.com');
+      const isVimeo = host.includes('vimeo.com');
+
+      if (isYoutube) {
+        videoIframeRef.current.contentWindow?.postMessage(
+          JSON.stringify({ event: 'command', func: 'seekTo', args: [0, true] }),
+          '*'
+        );
+        videoIframeRef.current.contentWindow?.postMessage(
+          JSON.stringify({ event: 'command', func: 'playVideo', args: [] }),
+          '*'
+        );
+      } else if (isVimeo) {
+        videoIframeRef.current.contentWindow?.postMessage(
+          JSON.stringify({ method: 'setCurrentTime', value: 0 }),
+          '*'
+        );
+        videoIframeRef.current.contentWindow?.postMessage(
+          JSON.stringify({ method: 'play' }),
+          '*'
+        );
+      }
+      setIsVideoPlaying(true);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Focus/tab switch cheat detection
   useEffect(() => {
@@ -1082,7 +1167,7 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
               )}
 
               {currentQ.Video && (
-                <div className="relative border border-slate-100 rounded-2xl overflow-hidden max-w-lg mx-auto bg-slate-900 aspect-video flex items-center justify-center shadow-md">
+                <div className="max-w-lg mx-auto border border-slate-200 rounded-2xl overflow-hidden shadow-lg bg-slate-950">
                   {(() => {
                     const parsed = parseVideoUrl(currentQ.Video);
                     if (!parsed) {
@@ -1092,23 +1177,52 @@ export default function QuizPlayer({ exam, level, student, mode, onBack, syncTri
                         </p>
                       );
                     }
-                    if (parsed.type === 'youtube' || parsed.type === 'vimeo') {
-                      return (
-                        <iframe
-                          src={parsed.url}
-                          className="w-full h-full"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          title="Video Player"
-                        />
-                      );
-                    }
+                    const embedUrl = getConfiguredEmbedUrl(parsed.url);
                     return (
-                      <video
-                        src={parsed.url}
-                        controls
-                        className="w-full h-full object-contain"
-                      />
+                      <div>
+                        {/* Video Aspect Container */}
+                        <div className="relative aspect-video bg-black flex items-center justify-center">
+                          {/* Secure Overlay to intercept clicks */}
+                          <div className="absolute inset-0 bg-transparent z-10" />
+                          <iframe
+                            ref={videoIframeRef}
+                            src={embedUrl}
+                            className="w-full h-full pointer-events-none"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            title="Video Player"
+                          />
+                        </div>
+                        {/* Custom Playback Controls */}
+                        <div className="px-4 py-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between gap-4 select-none">
+                          <button
+                            type="button"
+                            onClick={togglePlayPause}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-95"
+                          >
+                            {isVideoPlaying ? (
+                              <>
+                                <Pause className="w-4 h-4 fill-white" />
+                                <span>Tạm dừng</span>
+                              </>
+                            ) : (
+                              <>
+                                <Play className="w-4 h-4 fill-white" />
+                                <span>Phát Video</span>
+                              </>
+                            )}
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={handleRestartVideo}
+                            className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-sm font-semibold transition-all active:scale-95"
+                            title="Phát lại từ đầu"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            <span>Xem lại từ đầu</span>
+                          </button>
+                        </div>
+                      </div>
                     );
                   })()}
                 </div>

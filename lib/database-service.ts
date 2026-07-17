@@ -144,9 +144,23 @@ export class DatabaseService {
 
     const response = await fetch(proxyUrl, options);
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      let errMsg = `HTTP error! status: ${response.status}`;
+      try {
+        const errJson = await response.json();
+        if (errJson && errJson.error) {
+          errMsg = errJson.error;
+        } else if (errJson && errJson.message) {
+          errMsg = errJson.message;
+        }
+      } catch (_) {}
+      throw new Error(errMsg);
     }
-    return await response.json();
+    
+    const data = await response.json();
+    if (data && data.success === false) {
+      throw new Error(data.message || data.error || 'Request to Apps Script was not successful.');
+    }
+    return data;
   }
 
   // Verify Google Sheets connection
@@ -164,7 +178,7 @@ export class DatabaseService {
       }
       return { success: false, message: `Lỗi máy chủ proxy: HTTP ${response.status}` };
     } catch (e: any) {
-      console.error('Connection test failed', e);
+      console.warn('Connection test failed', e);
       return { success: false, message: e.message || 'Không thể kết nối đến máy chủ.' };
     }
   }
@@ -381,7 +395,7 @@ export class DatabaseService {
       this.saveSyncConfig(config.appsScriptUrl); // update lastSynced
       return { success: true, message: 'Đồng bộ dữ liệu từ Google Sheets thành công!' };
     } catch (error: any) {
-      console.error('Pull from Google Sheets failed', error);
+      console.warn('Pull from Google Sheets failed', error);
       return { success: false, message: `Thất bại: ${error.message || error}` };
     }
   }
@@ -574,7 +588,7 @@ export class DatabaseService {
           console.log('Successfully synced saved question to Google Sheets in background');
         })
         .catch(e => {
-          console.error('Failed to sync saved question to Google Sheets in background', e);
+          console.warn('Failed to sync saved question to Google Sheets in background', e);
         });
     }
 
@@ -610,7 +624,7 @@ export class DatabaseService {
           console.log('Successfully synced deleted question to Google Sheets in background');
         })
         .catch(e => {
-          console.error('Failed to delete question from Google Sheets in background', e);
+          console.warn('Failed to delete question from Google Sheets in background', e);
         });
     }
 
@@ -634,7 +648,7 @@ export class DatabaseService {
       try {
         await this.callAppsScript('createExam', {}, { level, examId });
       } catch (e) {
-        console.error('Failed to create sheet on Google Sheets', e);
+        console.warn('Failed to create sheet on Google Sheets', e);
       }
     }
 
@@ -655,7 +669,7 @@ export class DatabaseService {
       try {
         await this.callAppsScript('renameExam', {}, { oldLevel: level, oldExamId, newExamId, currentLevel: level });
       } catch (e) {
-        console.error('Failed to rename exam on Google Sheets', e);
+        console.warn('Failed to rename exam on Google Sheets', e);
       }
     }
 
@@ -687,7 +701,7 @@ export class DatabaseService {
       try {
         await this.callAppsScript('moveExam', {}, { examId, oldLevel, newLevel });
       } catch (e) {
-        console.error('Failed to move exam on Google Sheets', e);
+        console.warn('Failed to move exam on Google Sheets', e);
       }
     }
 
@@ -719,7 +733,7 @@ export class DatabaseService {
       try {
         await this.callAppsScript('copyExam', {}, { sourceLevel, sourceExamId, targetLevel, targetExamId });
       } catch (e) {
-        console.error('Failed to copy exam on Google Sheets', e);
+        console.warn('Failed to copy exam on Google Sheets', e);
       }
     }
 
@@ -767,7 +781,7 @@ export class DatabaseService {
       try {
         await this.callAppsScript('deleteExam', {}, { level, examId });
       } catch (e) {
-        console.error('Failed to delete exam on Google Sheets', e);
+        console.warn('Failed to delete exam on Google Sheets', e);
       }
     }
 
@@ -846,7 +860,7 @@ export class DatabaseService {
           console.log('Successfully synced student to Google Sheets in background');
         })
         .catch(e => {
-          console.error('Failed to sync student to Google Sheets in background', e);
+          console.warn('Failed to sync student to Google Sheets in background', e);
         });
     }
 
@@ -874,7 +888,7 @@ export class DatabaseService {
           console.log('Successfully synced deleted student to Google Sheets in background');
         })
         .catch(e => {
-          console.error('Failed to delete student from Google Sheets in background', e);
+          console.warn('Failed to delete student from Google Sheets in background', e);
         });
     }
 
@@ -949,7 +963,7 @@ export class DatabaseService {
         };
         await this.callAppsScript('submitScore', {}, { scoreRecord: payloadRecord });
       } catch (e) {
-        console.error('Failed to submit score to Google Sheets', e);
+        console.warn('Failed to submit score to Google Sheets', e);
       }
     }
 
@@ -1026,7 +1040,7 @@ export class DatabaseService {
           questionIds: mergedQuestionIDs
         });
       } catch (e) {
-        console.error('Failed to sync merged exam questions to Google Sheets', e);
+        console.warn('Failed to sync merged exam questions to Google Sheets', e);
       }
     }
 

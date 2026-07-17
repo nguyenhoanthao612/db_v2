@@ -21,52 +21,22 @@ import {
 
 const parseVideoUrl = (urlStr: string) => {
   if (!urlStr) return null;
-  const trimmed = urlStr.trim();
+  let trimmed = urlStr.trim();
   if (!trimmed) return null;
+  
+  // Extract URL from iframe if user pasted embed code
+  if (trimmed.includes('<iframe') || trimmed.startsWith('<')) {
+    const srcMatch = trimmed.match(/src=["']([^"']+)["']/i);
+    if (srcMatch && srcMatch[1]) {
+      trimmed = srcMatch[1].trim();
+    }
+  }
   
   try {
     const url = new URL(trimmed);
-    const hostname = url.hostname.toLowerCase();
-    
-    if (
-      hostname.includes('youtube.com') ||
-      hostname.includes('youtu.be') ||
-      hostname.includes('youtube-nocookie.com')
-    ) {
-      let videoId: string | null = null;
-      if (hostname.includes('youtu.be')) {
-        videoId = url.pathname.substring(1);
-      } else if (url.pathname.startsWith('/embed/')) {
-        videoId = url.pathname.split('/')[2];
-      } else if (url.pathname.startsWith('/v/')) {
-        videoId = url.pathname.split('/')[2];
-      } else {
-        videoId = url.searchParams.get('v');
-      }
-      
-      if (videoId) {
-        const cleanId = videoId.split('&')[0];
-        return {
-          type: 'youtube',
-          url: `https://www.youtube.com/embed/${cleanId}`
-        };
-      }
-    }
-    
-    if (hostname.includes('vimeo.com')) {
-      const parts = url.pathname.split('/');
-      const videoId = parts[parts.length - 1] || parts[parts.length - 2];
-      if (videoId && /^\d+$/.test(videoId)) {
-        return {
-          type: 'vimeo',
-          url: `https://player.vimeo.com/video/${videoId}`
-        };
-      }
-    }
-    
     if (url.protocol === 'http:' || url.protocol === 'https:') {
       return {
-        type: 'direct',
+        type: 'embed',
         url: trimmed
       };
     }
@@ -557,6 +527,9 @@ export default function QuestionsPage() {
       finalCorrectAnswerStr = JSON.stringify(cleanCorrect);
     }
 
+    const parsedVideo = parseVideoUrl(qVideoUrl);
+    const finalVideoUrl = parsedVideo ? parsedVideo.url : (qVideoUrl.trim() || undefined);
+
     const newQ: Question = {
       QuestionID: qId.trim().toUpperCase(),
       ExamID: qExamID.trim().toUpperCase(),
@@ -567,7 +540,7 @@ export default function QuestionsPage() {
       CorrectAnswer: finalCorrectAnswerStr,
       Explanation: qExplanation.trim(),
       Image: qImageUrl.trim() || undefined,
-      Video: qVideoUrl.trim() || undefined,
+      Video: finalVideoUrl,
       Score: Number(qScore),
       CreatedAt: editingQ ? editingQ.CreatedAt : new Date().toISOString(),
     };
@@ -1328,10 +1301,10 @@ export default function QuestionsPage() {
                 </div>
 
                 <div>
-                  <label className="block mb-1.5 text-[10px] text-slate-400">URL VIDEO (TÙY CHỌN CHO DẠNG VIDEO)</label>
+                  <label className="block mb-1.5 text-[10px] text-slate-400">VIDEO EMBED URL (TÙY CHỌN CHO DẠNG VIDEO)</label>
                   <input
-                    type="url"
-                    placeholder="Nhập link video https://..."
+                    type="text"
+                    placeholder="Nhập Video Embed URL..."
                     value={qVideoUrl}
                     onChange={(e) => setQVideoUrl(e.target.value)}
                     className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none text-slate-700 bg-slate-50/50 font-semibold"
@@ -1347,21 +1320,13 @@ export default function QuestionsPage() {
                     }
                     return (
                       <div className="mt-2.5 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden aspect-video relative shadow-inner flex items-center justify-center">
-                        {parsed.type === 'youtube' || parsed.type === 'vimeo' ? (
-                          <iframe
-                            src={parsed.url}
-                            className="w-full h-full"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                            title="Video Preview"
-                          />
-                        ) : (
-                          <video
-                            src={parsed.url}
-                            controls
-                            className="w-full h-full object-contain"
-                          />
-                        )}
+                        <iframe
+                          src={parsed.url}
+                          className="w-full h-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                          title="Video Preview"
+                        />
                       </div>
                     );
                   })()}
